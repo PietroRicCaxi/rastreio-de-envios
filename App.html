@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rastreio de envios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FA; --card:#FFFFFF; --line:#E3E8EF; --line2:#EEF1F5; --ink:#101828; --ink2:#344054; --muted:#475467; --muted2:#667085;
+    --navy:#1F3B5C; --navy2:#2B4E78; --blue:#1D4ED8; --blue-ink:#1E3A8A; --blue-bg:#EEF4FF;
+    --red-bg:#FEE4E2; --red-ink:#912018; --red:#B42318; --red-row:#FEF3F2;
+    --amber-bg:#FEF0C7; --amber-ink:#7A2E0E; --orange-bg:#FFE6D5; --orange-ink:#772917;
+    --green-bg:#DCFAE6; --green-ink:#085D3A; --green:#067647; --info-bg:#E0EAFF; --grey-bg:#F2F4F7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 'IBM Plex Sans',system-ui,sans-serif}
+  a{color:var(--blue)} a:hover{color:var(--blue-ink)}
+  button,input,select,textarea{font:inherit;color:inherit}
+  .mono{font-family:'IBM Plex Mono',monospace}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+  header{background:var(--navy);color:#fff}
+  header .wrap{height:60px;display:flex;align-items:center;gap:32px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+  nav{display:flex;gap:4px;height:100%}
+  nav button{background:none;border:0;border-bottom:3px solid transparent;color:#D6E0EE;padding:0 14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;height:100%}
+  nav button[aria-current="page"]{color:#fff;font-weight:600;border-bottom-color:#fff}
+  .pill{border-radius:999px;padding:1px 8px;font-size:12px;font-weight:700;background:#fff;color:var(--navy)}
+  .hright{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:12px;color:#C7D4E6}
+  .hbtn{background:var(--navy2);color:#fff;border:0;border-radius:8px;min-height:36px;padding:0 12px;font-weight:600;cursor:pointer}
+  .hbtn:disabled{opacity:.6;cursor:default}
+  .avatar{width:32px;height:32px;border-radius:999px;background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  main{padding:28px 0 48px}
+  main .wrap{display:flex;flex-direction:column;gap:20px}
+  h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.01em}
+  h2{margin:0;font-size:17px;font-weight:600}
+  .sub{margin:0;color:var(--muted)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .between{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label,.lbl{font-size:12px;font-weight:600;color:var(--ink2)}
+  input[type=search],select,textarea{border:1px solid #CBD2DC;border-radius:10px;background:#fff;color:var(--ink)}
+  input[type=search]{height:44px;padding:0 14px;width:340px;max-width:100%}
+  select{height:40px;padding:0 12px;min-width:200px}
+  textarea{padding:10px 12px;resize:vertical;width:100%;line-height:1.5}
+  .chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;font-weight:600;cursor:pointer;background:#fff;color:var(--ink2);border:1px solid #CBD2DC}
+  .chip .n{border-radius:999px;padding:1px 8px;font-size:12px;background:var(--grey-bg);color:var(--ink2)}
+  .chip[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .chip[aria-pressed="true"] .n{background:#fff;color:var(--navy)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .pad{padding:20px 24px;display:flex;flex-direction:column;gap:14px}
+  .table{overflow:visible}
+  .table>.thead:first-child,.table>div:first-child{border-radius:14px 14px 0 0}
+  .thead,.trow{display:grid;gap:16px;padding:12px 20px;align-items:center}
+  .thead{background:#F8FAFC;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .trow{border-bottom:1px solid var(--line2);padding:14px 20px;cursor:pointer;width:100%;background:#fff;border-left:0;border-right:0;border-top:0;text-align:left}
+  .trow:hover{background:#F8FAFC}
+  .trow.passou{background:var(--red-row)}
+  .g-occ{grid-template-columns:100px minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1.6fr) minmax(0,1.1fr) 170px}
+  .g-env{grid-template-columns:90px minmax(0,1.3fr) minmax(0,1fr) 90px 130px 120px 170px}
+  .cell{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .strong{font-weight:600} .small{font-size:12px;color:var(--muted2)} .ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;align-self:flex-start}
+  .b-red{background:var(--red-bg);color:var(--red-ink)} .b-amber{background:var(--amber-bg);color:var(--amber-ink)}
+  .b-orange{background:var(--orange-bg);color:var(--orange-ink)} .b-info{background:var(--info-bg);color:var(--blue-ink)}
+  .b-green{background:var(--green-bg);color:var(--green-ink)} .b-grey{background:var(--grey-bg);color:var(--ink2)}
+  .tag{display:inline-block;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:500;background:var(--grey-bg);color:var(--ink2)}
+  .tag.nova{background:#fff;border:1px solid #CBD2DC}
+  .tag.contato{background:var(--info-bg);color:var(--blue-ink)}
+  .gflag{display:inline-block;margin-top:4px;font-size:11px;font-weight:600;color:var(--amber-ink)}
+  .empty{padding:40px 20px;text-align:center;color:var(--muted)}
+  .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+  .kpi{padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+  .kpi .v{font-size:28px;font-weight:700} .kpi .u{font-size:13px;font-weight:500;color:var(--muted)}
+  .bar{height:12px;background:var(--line2);border-radius:999px;overflow:hidden} .bar>div{height:100%;background:var(--navy);border-radius:999px}
+  .forma{display:grid;grid-template-columns:120px minmax(0,1fr) 60px 230px;gap:16px;align-items:center}
+  .tabs{display:flex;gap:8px}
+  .tab{min-height:40px;padding:0 14px;border-radius:10px;font-weight:600;cursor:pointer;background:#fff;color:var(--ink2);border:1px solid #CBD2DC}
+  .tab[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .back{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:44px;background:none;border:0;color:var(--blue);font-weight:600;cursor:pointer;padding:0}
+  .summary{padding:20px 24px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;font-weight:600;cursor:pointer;text-decoration:none;border:1px solid #CBD2DC;background:#fff;color:var(--ink2)}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.outline{border-color:var(--blue);color:var(--blue)}
+  .btn:disabled{opacity:.55;cursor:default}
+  .icon-btn{width:44px;height:44px;border:0;background:none;border-radius:8px;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
+  .cols{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:20px;align-items:start}
+  .stack{display:flex;flex-direction:column;gap:20px}
+  .mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  .mini .card{padding:16px;display:flex;flex-direction:column;gap:4px}
+  .mini .v{font-size:22px;font-weight:700} .mini .v.red{color:var(--red)}
+  ol.tl{list-style:none;margin:0;padding:0}
+  ol.tl li{display:grid;grid-template-columns:90px 20px minmax(0,1fr);gap:12px;padding-bottom:16px}
+  .tl .when{text-align:right;display:flex;flex-direction:column}
+  .tl .dot{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .tl .dot span:first-child{width:12px;height:12px;border-radius:999px;background:#98A2B3;margin-top:4px}
+  .tl li:first-child .dot span:first-child{background:#B54708}
+  .tl .dot span:last-child{width:2px;flex-grow:1;min-height:20px;background:var(--line)}
+  .tl li:last-child .dot span:last-child{background:transparent}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+  .sit{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 14px;border-radius:10px;text-align:left;cursor:pointer;background:#fff;border:1px solid var(--line);color:var(--ink2);font-weight:500;width:100%}
+  .sit .r{width:14px;height:14px;border-radius:999px;border:1.5px solid #98A2B3;flex-shrink:0}
+  .sit[aria-pressed="true"]{background:var(--blue-bg);border-color:var(--blue);color:var(--blue-ink);font-weight:600}
+  .sit[aria-pressed="true"] .r{border:4px solid var(--blue);background:#fff}
+  .check{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 14px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  .check input{width:18px;height:18px;margin:0;accent-color:var(--blue)}
+  ul.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+  ul.hist li{display:flex;flex-direction:column;gap:2px;white-space:pre-line}
+  .note{font-size:12px;color:var(--muted2);line-height:1.45}
+  .alert{padding:12px 16px;border-radius:10px;background:var(--red-bg);color:var(--red-ink);font-weight:500}
+  .ok{padding:12px 16px;border-radius:10px;background:var(--green-bg);color:var(--green-ink);font-weight:500}
+  .loading{padding:60px 20px;text-align:center;color:var(--muted)}
+  .clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .g-ped{grid-template-columns:110px minmax(0,1.3fr) minmax(0,1.3fr) 190px 130px 150px}
+  .sat{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .sat.pendente{background:var(--amber-bg);color:var(--amber-ink)} .sat.enviada{background:var(--green-bg);color:var(--green-ink)}
+  .sat.dispensada{background:var(--grey-bg);color:var(--muted)}
+  .linkbtn{background:none;border:0;color:var(--blue);font-weight:600;cursor:pointer;padding:0;min-height:44px}
+  .th-f{position:relative;display:flex;align-items:center;gap:4px}
+  .funil{width:32px;height:32px;border:1px solid transparent;border-radius:8px;background:none;cursor:pointer;color:var(--muted);display:inline-flex;align-items:center;justify-content:center}
+  .funil:hover{background:#EEF1F5} .funil.on{background:var(--navy);color:#fff}
+  .menu{position:absolute;top:36px;right:0;z-index:20;min-width:240px;max-height:340px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(16,24,40,.12);padding:6px;text-transform:none;letter-spacing:0}
+  .menu button{display:flex;justify-content:space-between;gap:12px;width:100%;min-height:40px;padding:0 12px;border:0;background:none;border-radius:8px;cursor:pointer;font-weight:500;color:var(--ink2);text-align:left}
+  .menu button:hover{background:#F2F4F7} .menu button[aria-pressed="true"]{background:var(--blue-bg);color:var(--blue-ink);font-weight:600}
+  .menu .c{color:var(--muted2);font-weight:500}
+  .ord{display:inline-flex;align-items:center;gap:4px;background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;font-weight:inherit;min-height:32px}
+  .ord:hover{color:var(--ink)} .ord.on{color:var(--blue)}
+  .g-res{grid-template-columns:100px minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.6fr) 150px}
+  .g-hist{grid-template-columns:120px 100px minmax(0,1fr) 170px minmax(0,2fr) 150px}
+  .chip.sep{margin-left:8px;border-style:dashed}
+  .inline-num{width:72px;height:36px;border:1px solid #CBD2DC;border-radius:8px;padding:0 10px;text-align:center;font-weight:700;margin:0 6px}
+  input[type=date]{height:40px;border:1px solid #CBD2DC;border-radius:10px;padding:0 10px;background:#fff}
+  .confirma{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;border-radius:10px;background:var(--amber-bg);color:var(--amber-ink);font-weight:500}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  @media (max-width: 900px){
+    .g-occ,.g-env,.g-ped,.g-res,.g-hist,.thead{grid-template-columns:1fr 1fr !important}
+    .thead{display:none}
+    .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .cols{grid-template-columns:1fr} .mini{grid-template-columns:repeat(2,minmax(0,1fr))} .grid3{grid-template-columns:1fr}
+    .forma{grid-template-columns:80px minmax(0,1fr) 50px} .forma .small{display:none}
+    .wrap{padding:0 16px}
+    header .wrap{flex-wrap:wrap;height:auto;padding:10px 16px 0;gap:8px 12px}
+    header nav{order:3;width:100%;height:44px}
+    header nav button{padding:0 10px}
+    .hright .when{display:none}
+    input[type=search]{width:100%} .between>.field{width:100%}
+    .chip{min-height:40px;padding:0 12px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"></path><path d="M3 8v8l9 5 9-5V8"></path><path d="M12 13v8"></path></svg>
+      <span>Rastreio de envios</span>
+    </div>
+    <nav aria-label="Seções">
+      <button type="button" id="nav-occ" onclick="ir('ocorrencias')">Ocorrências <span class="pill" id="nav-count">·</span></button>
+      <button type="button" id="nav-ped" onclick="ir('pedidos')">Pedidos</button>
+      <button type="button" id="nav-sat" onclick="ir('satisfacao')">Satisfação <span class="pill" id="nav-sat-count">·</span></button>
+      <button type="button" id="nav-pai" onclick="ir('painel')">Painel</button>
+    </nav>
+    <div class="hright">
+      <span class="when" id="h-when"></span>
+      <button type="button" class="hbtn" id="h-refresh" onclick="atualizarAgora()">Atualizar agora</button>
+      <span class="avatar" id="h-user" aria-label="Usuário">·</span>
+    </div>
+  </div>
+</header>
+<main><div class="wrap" id="view"><div class="loading">Carregando…</div></div></main>
+
+<script>
+/* ---------------- estado ---------------- */
+var S = { tela: 'ocorrencias', occ: null, filtroTipo: 'todas', busca: '', transp: 'todas', trat: 'abertas',
+          painel: null, abaForma: 'todas', pedido: null, sitEscolhida: null, msg: '', msgSat: '',
+          lista: null, grupo: 'todos', buscaPed: '', origem: 'ocorrencias',
+          funil: { pai: '', ped: '' }, funilAberto: '', painelDias: 14, zapPendente: '',
+          satModo: 'pendente', satDe: '', satAte: '',
+          ordem: { occ: '', ped: '', pai: '', res: '' }, res: null, resModo: 'resolvidos', buscaRes: '' };
+/* Cabeçalho "Pedido" clicável: 1º clique = mais antigo primeiro, 2º = mais novo primeiro */
+function ordenarCab(id, rotulo){
+  var o = S.ordem[id];
+  var seta = o === 'asc' ? '↑' : o === 'desc' ? '↓' : '↕';
+  var dica = o === 'asc' ? 'mais antigo primeiro — clique para inverter' : o === 'desc' ? 'mais novo primeiro — clique para inverter' : 'clique para ordenar do mais antigo para o mais novo';
+  return '<span><button type="button" class="ord' + (o ? ' on' : '') + '" title="' + dica + '" aria-label="Ordenar por pedido: ' + dica + '" onclick="trocarOrdem(\'' + id + '\')">' + rotulo + ' <span aria-hidden="true">' + seta + '</span></button></span>';
+}
+function trocarOrdem(id){ S.ordem[id] = S.ordem[id] === 'asc' ? 'desc' : 'asc'; redesenhar(); }
+function ordenar(lista, id){
+  var o = S.ordem[id]; if (!o) return lista;
+  return lista.slice().sort(function(a, b){ var d = (Number(a.pedido) || 0) - (Number(b.pedido) || 0); return o === 'asc' ? d : -d; });
+}
+document.addEventListener('click', function(e){
+  if (S.funilAberto && !e.target.closest('.th-f')) { S.funilAberto = ''; redesenhar(); }
+});
+function redesenhar(){ if (S.tela === 'painel') renderPainel(); else if (S.tela === 'pedidos' || S.tela === 'satisfacao') renderPedidos(); else if (S.tela === 'ocorrencias') renderOcorrencias(); else if (S.tela === 'resolvidos') renderResolvidos(); }
+function hojeISO(off){ var d = new Date(); d.setDate(d.getDate() + (off || 0)); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+/* Cabeçalho "Status" com funil: abre a lista de status para filtrar */
+function funil(id, itens){
+  var conta = {}, rot = {};
+  itens.forEach(function(i){ conta[i.tipo] = (conta[i.tipo] || 0) + 1; rot[i.tipo] = i.status; });
+  var atual = S.funil[id], aberto = S.funilAberto === id;
+  var ops = '<button type="button" aria-pressed="' + (!atual) + '" onclick="escolherFunil(\'' + id + '\',\'\')">Todos <span class="c">' + itens.length + '</span></button>' +
+    Object.keys(conta).sort(function(a,b){ return conta[b] - conta[a]; }).map(function(t){
+      return '<button type="button" aria-pressed="' + (atual === t) + '" onclick="escolherFunil(\'' + id + '\',\'' + t + '\')">' + esc(rot[t]) + ' <span class="c">' + conta[t] + '</span></button>';
+    }).join('');
+  return '<span class="th-f">Status' + (atual ? ': ' + esc(rot[atual] || '') : '') +
+    '<button type="button" class="funil' + (atual ? ' on' : '') + '" aria-label="Filtrar por status" aria-expanded="' + aberto + '" onclick="event.stopPropagation();S.funilAberto=S.funilAberto===\'' + id + '\'?\'\':\'' + id + '\';redesenhar()">' +
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5L3 4z"></path></svg></button>' +
+    (aberto ? '<div class="menu" role="menu" onclick="event.stopPropagation()">' + ops + '</div>' : '') + '</span>';
+}
+function escolherFunil(id, t){ S.funil[id] = t; S.funilAberto = ''; redesenhar(); }
+
+var COR = { EXTRAVIADO:'b-red', DEVOLVIDO:'b-red', EM_DEVOLUCAO:'b-red', PROBLEMA_ENTREGA:'b-red', TENTATIVA_FALHOU:'b-red',
+            DESVIO:'b-orange', PARADO:'b-orange', ATRASADO:'b-amber', NAO_POSTADO:'b-amber', AGUARDANDO_RETIRADA:'b-info',
+            CANCELADO:'b-red', SEM_CONCLUSAO:'b-grey', ENTREGUE:'b-green', SAIU_PARA_ENTREGA:'b-info' };
+
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function $(id){ return document.getElementById(id); }
+function view(html){ $('view').innerHTML = html; window.scrollTo(0,0); }
+function erro(e){ view('<div class="alert">Algo deu errado: ' + esc(e && e.message ? e.message : e) + '</div><button class="btn" onclick="ir(S.tela)">Tentar de novo</button>'); }
+function cab(d){
+  if (d && d.atualizadoEm) $('h-when').textContent = 'Atualizado em ' + d.atualizadoEm;
+  if (d && d.usuario) { $('h-user').textContent = d.usuario.charAt(0).toUpperCase(); $('h-user').title = d.usuario; }
+  if (d && d.contagens) { $('nav-count').textContent = d.contagens.ocorrencias; $('nav-sat-count').textContent = d.contagens.satisfacao; }
+}
+function marcarNav(){
+  var ativa = S.tela === 'pedido' ? S.origem : S.tela;
+  if (ativa === 'resolvidos') ativa = 'ocorrencias';
+  [['nav-occ','ocorrencias'],['nav-ped','pedidos'],['nav-sat','satisfacao'],['nav-pai','painel']].forEach(function(x){
+    $(x[0]).setAttribute('aria-current', ativa === x[1] ? 'page' : 'false'); });
+}
+function api(nome){
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function(ok, falha){
+    var r = google.script.run.withSuccessHandler(ok).withFailureHandler(falha);
+    r[nome].apply(r, args);
+  });
+}
+
+/* ---------------- navegação ---------------- */
+function ir(tela, chave){
+  if (tela === 'pedido' && S.tela !== 'pedido') S.origem = S.tela;
+  S.tela = tela; marcarNav();
+  if (tela === 'ocorrencias') carregarOcorrencias();
+  else if (tela === 'pedidos' || tela === 'satisfacao') carregarPedidos();
+  else if (tela === 'painel') carregarPainel();
+  else if (tela === 'resolvidos') carregarResolvidos();
+  else if (tela === 'pedido') carregarPedido(chave);
+}
+var NOMES_TELA = { ocorrencias: 'ocorrências', pedidos: 'pedidos', satisfacao: 'satisfação', painel: 'painel', resolvidos: 'resolvidos' };
+
+function atualizarAgora(){
+  var b = $('h-refresh'); b.disabled = true; b.textContent = 'Atualizando… (até 5 min)';
+  api('api_atualizarAgora').then(function(){ b.disabled = false; b.textContent = 'Atualizar agora';
+    ir(S.tela, S.pedido && S.pedido.chave); })
+    .catch(function(e){ b.disabled = false; b.textContent = 'Atualizar agora'; erro(e); });
+}
+
+/* ---------------- OCORRÊNCIAS ---------------- */
+function carregarOcorrencias(){
+  view('<div class="loading">Carregando ocorrências…</div>');
+  api('api_ocorrencias').then(function(d){ S.occ = d; cab(d); renderOcorrencias(); }).catch(erro);
+}
+
+function filtrar(itens){
+  var q = S.busca.trim().toLowerCase();
+  return itens.filter(function(i){
+    if (S.filtroTipo !== 'todas' && i.tipo !== S.filtroTipo) return false;
+    var jad = /jadlog/i.test(i.enviadoPor) || /^\d{8,15}$|^ME/i.test(i.codigo);
+    if (S.transp === 'correios' && jad) return false;
+    if (S.transp === 'jadlog' && !jad) return false;
+    if (S.trat === 'gestao' && !i.gestao) return false;
+    if (S.trat !== 'abertas' && S.trat !== 'gestao' && i.situacao !== S.trat) return false;
+    if (q && (i.pedido + ' ' + i.codigo + ' ' + i.cliente).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+}
+
+function renderOcorrencias(){
+  var d = S.occ, tipos = {}, ordem = [];
+  d.itens.forEach(function(i){ if (!tipos[i.tipo]) { tipos[i.tipo] = { label: i.tipoLabel, n: 0 }; ordem.push(i.tipo); } tipos[i.tipo].n++; });
+  var chips = '<button type="button" class="chip" aria-pressed="' + (S.filtroTipo === 'todas') + '" onclick="S.filtroTipo=\'todas\';renderOcorrencias()">Todas <span class="n">' + d.itens.length + '</span></button>' +
+    ordem.map(function(t){ return '<button type="button" class="chip" aria-pressed="' + (S.filtroTipo === t) + '" onclick="S.filtroTipo=\'' + t + '\';renderOcorrencias()">' + esc(tipos[t].label) + ' <span class="n">' + tipos[t].n + '</span></button>'; }).join('') +
+    '<button type="button" class="chip sep" onclick="ir(\'resolvidos\')">Resolvidos e alterações →</button>';
+  var opTrat = '<option value="abertas">Todas em aberto</option><option value="gestao">Gestão informada</option>' +
+    d.situacoes.filter(function(s){ return s.aberta; }).map(function(s){ return '<option value="' + s.id + '">' + esc(s.label) + '</option>'; }).join('');
+  var lista = ordenar(filtrar(d.itens), 'occ');
+  var linhas = lista.map(function(i){
+    return '<button type="button" class="trow g-occ" onclick="ir(\'pedido\',\'' + esc(i.chave).replace(/\\/g,'\\\\') + '\')">' +
+      '<span class="cell"><span class="strong">#' + esc(i.pedido) + '</span><span class="small">' + (i.dataPedido ? 'pedido de ' + esc(i.dataPedido) : '') + '</span></span>' +
+      '<span class="cell"><span class="ell" style="font-weight:500">' + esc(i.cliente) + '</span><span class="small">' + esc(i.cidade) + '</span></span>' +
+      '<span class="cell"><span class="badge ' + (COR[i.tipo] || 'b-grey') + '">' + esc(i.tipoLabel) + '</span>' +
+        '<span class="small">' + (i.diasUteis != null ? 'há ' + i.diasUteis + (i.diasUteis === 1 ? ' dia útil' : ' dias úteis') : '') + '</span></span>' +
+      '<span class="cell"><span class="clamp" style="color:var(--ink2)" title="' + esc(i.evento) + '">' + esc(i.evento) + '</span><span class="small">' + esc(i.eventoData) + '</span></span>' +
+      '<span class="cell"><span style="font-weight:500">' + esc(i.enviadoPor || i.forma) + '</span><span class="mono small">' + esc(i.codigo) + '</span></span>' +
+      '<span class="cell"><span class="tag ' + esc(i.situacao) + '">' + esc(i.situacaoLabel) + '</span>' + (i.gestao ? '<span class="gflag">Gestão informada</span>' : '') + '</span>' +
+    '</button>';
+  }).join('');
+  view(
+    '<div class="between"><div class="cell" style="gap:4px"><h1>Ocorrências</h1><p class="sub">' + d.itens.length + ' pedidos precisam de atenção · os mais graves e mais antigos primeiro</p></div>' +
+      '<div class="field"><label for="busca">Buscar</label><input id="busca" type="search" placeholder="Pedido, código de rastreio ou cliente" value="' + esc(S.busca) + '" oninput="S.busca=this.value;renderLista()"></div></div>' +
+    '<div role="group" aria-label="Filtrar por tipo de ocorrência" class="row">' + chips + '</div>' +
+    '<div class="row">' +
+      '<div class="field"><label for="f-transp">Transportadora</label><select id="f-transp" onchange="S.transp=this.value;renderOcorrencias()">' +
+        '<option value="todas">Todas</option><option value="correios">Correios (SEDEX / PAC)</option><option value="jadlog">Jadlog (Melhor Envio)</option></select></div>' +
+      '<div class="field"><label for="f-trat">Tratativa</label><select id="f-trat" onchange="S.trat=this.value;renderOcorrencias()">' + opTrat + '</select></div></div>' +
+    '<section class="card table" aria-label="Fila de ocorrências">' +
+      '<div class="thead g-occ">' + ordenarCab('occ', 'Pedido') + '<span>Cliente</span><span>Ocorrência</span><span>Último evento</span><span>Envio</span><span>Tratativa</span></div>' +
+      '<div id="lista">' + (linhas || '<div class="empty">Nenhuma ocorrência com esses filtros.' +
+        (S.busca.trim() ? '<br><button type="button" class="linkbtn" onclick="S.buscaPed=S.busca;S.grupo=\'todos\';ir(\'pedidos\')">Procurar “' + esc(S.busca.trim()) + '” em todos os pedidos</button>' : '') + '</div>') + '</div></section>' +
+    '<p class="note">Quando a transportadora confirma a entrega, o pedido sai da fila sozinho. Casos resolvidos voltam para a fila se aparecer um problema novo.</p>'
+  );
+  $('f-transp').value = S.transp; $('f-trat').value = S.trat;
+}
+function renderLista(){ // busca sem perder o foco do campo
+  var foco = document.activeElement && document.activeElement.id === 'busca', pos = foco ? $('busca').selectionStart : 0;
+  renderOcorrencias();
+  if (foco) { var b = $('busca'); b.focus(); b.setSelectionRange(pos, pos); }
+}
+
+/* ---------------- DETALHE ---------------- */
+function carregarPedido(chave){
+  view('<div class="loading">Consultando a transportadora e a Loja Integrada…</div>');
+  api('api_pedido', chave).then(function(p){ S.pedido = p; S.sitEscolhida = p.situacao; S.msg = p.mensagem.texto; S.msgSat = p.mensagemSatisfacao.texto; cab(p); renderPedido(); }).catch(erro);
+}
+
+function n(v, sufixo){ if (v == null) return '—'; if (sufixo === 'dias úteis' && v === 1) sufixo = 'dia útil'; return v + (sufixo ? ' <span class="u" style="font-size:13px;font-weight:500;color:var(--muted)">' + sufixo + '</span>' : ''); }
+
+function renderPedido(aviso){
+  var p = S.pedido;
+  var passou = p.diasTransito != null && p.prazo && p.diasTransito > p.prazo;
+  var forma = p.enviadoPor && p.enviadoPor.toLowerCase().indexOf(p.forma.toLowerCase()) < 0 ? esc(p.forma) + ' → ' + esc(p.enviadoPor) : esc(p.enviadoPor || p.forma);
+  var tl = p.eventos.length ? '<ol class="tl">' + p.eventos.map(function(e){
+      return '<li><div class="when"><span class="strong">' + esc(e.dia) + '</span><span class="small">' + esc(e.hora) + '</span></div>' +
+        '<div class="dot"><span></span><span></span></div><div class="cell"><span style="font-weight:500">' + esc(e.titulo) + '</span><span class="small">' + esc(e.local) + '</span></div></li>';
+    }).join('') + '</ol>' : '<p class="small" style="margin:0">Sem eventos da transportadora.</p>';
+  var sits = p.situacoes.map(function(s){
+    return '<button type="button" class="sit" aria-pressed="' + (S.sitEscolhida === s.id) + '" onclick="S.sitEscolhida=\'' + s.id + '\';renderPedido()"><span class="r"></span>' + esc(s.label) + '</button>';
+  }).join('');
+  var hist = p.historico.length ? p.historico.map(function(h){
+      return '<li><span class="small">' + esc(h.quando) + ' · ' + esc(h.por) + ' · ' + esc(h.acao) + '</span><span>' + esc(h.detalhe) + '</span></li>';
+    }).join('') : '<li class="small">Nada registrado ainda.</li>';
+  var temZap = !!p.cliente.whatsapp, temMail = !!p.cliente.email;
+
+  view(
+    '<button type="button" class="back" onclick="ir(S.origem)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Voltar para ' + NOMES_TELA[S.origem] + '</button>' +
+    (aviso ? '<div class="ok" role="status">' + esc(aviso) + '</div>' : '') +
+    '<section class="card summary" aria-label="Resumo do pedido">' +
+      '<div class="cell" style="gap:6px;min-width:260px">' +
+        '<div class="row" style="align-items:center"><h1>Pedido #' + esc(p.pedido) + '</h1><span class="badge ' + (COR[p.tipo] || 'b-grey') + '">' + esc(p.tipoLabel) + '</span></div>' +
+        '<div class="row" style="align-items:center;gap:10px;color:var(--muted)"><span>' + forma + '</span><span aria-hidden="true">·</span>' +
+          '<span class="mono" style="color:var(--ink)">' + esc(p.codigo) + '</span>' +
+          '<button type="button" class="icon-btn" aria-label="Copiar código de rastreio" onclick="copiar(\'' + esc(p.codigo) + '\', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button></div>' +
+        '<span class="small">' + [p.dataPedido ? 'Pedido de ' + esc(p.dataPedido) : '', p.vinculo ? 'código vinculado na LI em ' + esc(p.vinculo) : '', p.entregueEm ? 'entregue em ' + esc(p.entregueEm) : ''].filter(Boolean).join(' · ') + '</span>' +
+        (p.observacao ? '<span class="small">' + esc(p.observacao) + '</span>' : '') +
+      '</div>' +
+      '<div class="row" style="margin-left:auto">' +
+        (p.linkRastreio ? '<a class="btn" href="' + esc(p.linkRastreio) + '" target="_blank" rel="noopener">Ver rastreio completo</a>' : '') +
+        '<a class="btn" href="' + esc(p.linkLI) + '" target="_blank" rel="noopener">Abrir pedido na Loja Integrada</a></div>' +
+    '</section>' +
+    '<div class="cols"><div class="stack">' +
+      '<section class="mini" aria-label="Prazo">' +
+        '<div class="card"><span class="small" style="color:var(--muted)">Prazo LI</span><span class="v">' + n(p.prazo, 'dias úteis') + '</span></div>' +
+        '<div class="card"><span class="small" style="color:var(--muted)">Em trânsito</span><span class="v' + (passou ? ' red' : '') + '">' + n(p.diasTransito, 'dias úteis') + '</span></div>' +
+        '<div class="card"><span class="small" style="color:var(--muted)">Previsão da transportadora</span><span class="v">' + (p.previsao || '—') + '</span></div>' +
+        '<div class="card"><span class="small" style="color:var(--muted)">Sem movimento há</span><span class="v">' + n(p.semMovimento, 'dias úteis') + '</span></div>' +
+      '</section>' +
+      '<section class="card pad" aria-labelledby="t-tl"><div class="between" style="align-items:baseline"><h2 id="t-tl">Linha do tempo</h2><span class="small">' + (p.fonteEventos ? 'fonte: ' + esc(p.fonteEventos) + ' · agora' : '') + '</span></div>' +
+        (p.avisoEventos ? '<p class="note" style="margin:0">' + esc(p.avisoEventos) + '</p>' : '') + tl + '</section>' +
+      '<section class="card pad" aria-labelledby="t-cli"><h2 id="t-cli">Cliente</h2><div class="grid3">' +
+        '<div class="cell"><span class="small" style="color:var(--muted)">Nome</span><span style="font-weight:500">' + esc(p.cliente.nome) + '</span></div>' +
+        '<div class="cell"><span class="small" style="color:var(--muted)">E-mail</span><span style="font-weight:500;word-break:break-all">' + (esc(p.cliente.email) || '—') + '</span></div>' +
+        '<div class="cell"><span class="small" style="color:var(--muted)">Telefone</span><span style="font-weight:500">' + (esc(p.cliente.telefone) || '—') + '</span></div></div>' +
+        (p.cliente.endereco ? '<div class="cell"><span class="small" style="color:var(--muted)">Endereço de entrega</span><span>' + esc(p.cliente.endereco) + '</span></div>' : '') +
+        (p.encontradoVia ? '<span class="small">Rastreado via ' + esc(p.encontradoVia) + (p.codigoTransportadora && p.codigoTransportadora !== p.codigo ? ' · código na transportadora ' + esc(p.codigoTransportadora) : '') + '</span>' : '') +
+      '</section>' +
+    '</div><div class="stack">' + cardSatisfacao(p) + (p.mostrarTratativa ? (
+      '<section class="card pad" aria-labelledby="t-trat"><h2 id="t-trat">Tratativa</h2>' +
+        '<div role="group" aria-label="Situação da tratativa" style="display:flex;flex-direction:column;gap:8px">' + sits + '</div>' +
+        '<div class="field"><label for="nota">Anotação</label><textarea id="nota" rows="3" placeholder="O que foi feito, com quem falou, próximo passo"></textarea></div>' +
+        '<label class="check"><input type="checkbox" id="gestao"' + (p.gestao ? ' checked' : '') + '><span class="cell"><span class="strong">Gestão informada</span><span class="small">Destaca o caso no painel e manda um aviso por e-mail à gestão</span></span></label>' +
+        '<button type="button" class="btn primary" id="b-salvar" onclick="salvar()">Salvar tratativa</button>' +
+      '</section>' +
+      '<section class="card pad" aria-labelledby="t-msg"><h2 id="t-msg">Mensagem para o cliente</h2>' +
+        '<label class="sr" for="msg">Texto da mensagem</label><textarea id="msg" rows="8" oninput="S.msg=this.value">' + esc(S.msg) + '</textarea>' +
+        '<div class="row">' +
+          '<button type="button" class="btn primary" id="b-mail" onclick="enviarEmail(\'ocorrencia\')"' + (temMail ? '' : ' disabled title="A LI não informou o e-mail"') + '>Enviar por e-mail</button>' +
+          '<button type="button" class="btn outline" onclick="abrirZap(\'ocorrencia\')"' + (temZap ? '' : ' disabled title="A LI não informou um celular válido"') + '>Abrir no WhatsApp</button>' +
+          '<button type="button" class="btn" onclick="copiar(S.msg, this)">Copiar</button></div>' +
+        barraZap('ocorrencia') + seletorZap() +
+        '<p class="note" style="margin:0">E-mail: sai direto para ' + (esc(p.cliente.email) || 'o cliente') + '. WhatsApp: abre a conversa com o texto pronto; é só apertar enviar. Os dois ficam no histórico.</p>' +
+      '</section>') : (p.entregue ? '' : '<section class="card pad"><h2>Sem ocorrência</h2><p class="small" style="margin:0">Este pedido está seguindo normalmente. Se aparecer um problema, ele entra na fila de ocorrências sozinho.</p></section>')) +
+      '<section class="card pad" aria-labelledby="t-hist"><h2 id="t-hist">Histórico</h2><ul class="hist">' + hist + '</ul></section>' +
+    '</div></div>'
+  );
+}
+
+function salvar(){
+  var b = $('b-salvar'); b.disabled = true; b.textContent = 'Salvando…';
+  api('api_salvarTratativa', S.pedido.chave, S.sitEscolhida, $('nota').value, $('gestao').checked)
+    .then(function(p){ S.pedido = p; S.sitEscolhida = p.situacao; renderPedido('Tratativa salva.'); })
+    .catch(function(e){ b.disabled = false; b.textContent = 'Salvar tratativa'; alertar(e); });
+}
+function textoDe(tipo){ return tipo === 'satisfacao' ? S.msgSat : S.msg; }
+function aposAcao(p, aviso){ var m = S.msg, ms = S.msgSat; S.zapPendente = ''; S.pedido = p; S.sitEscolhida = p.situacao; S.msg = m; S.msgSat = ms; cab(p); renderPedido(aviso); }
+function enviarEmail(tipo){
+  if (!confirm('Enviar este e-mail para ' + S.pedido.cliente.email + '?')) return;
+  var b = $(tipo === 'satisfacao' ? 'b-mail-sat' : 'b-mail'); b.disabled = true; b.textContent = 'Enviando…';
+  var assunto = tipo === 'satisfacao' ? S.pedido.mensagemSatisfacao.assunto : S.pedido.mensagem.assunto;
+  api('api_enviarEmailCliente', S.pedido.chave, assunto, textoDe(tipo), tipo)
+    .then(function(p){ aposAcao(p, 'E-mail enviado para ' + p.cliente.email + '.'); })
+    .catch(function(e){ b.disabled = false; b.textContent = 'Enviar por e-mail'; alertar(e); });
+}
+/* Onde abrir o WhatsApp: 'web' (WhatsApp Web, padrão) ou 'app' (aplicativo instalado no computador).
+   A escolha fica salva neste navegador. */
+function modoZap(){ try { return localStorage.getItem('modoZap') || 'web'; } catch (e) { return 'web'; } }
+function trocarModoZap(v){ try { localStorage.setItem('modoZap', v); } catch (e) {} renderPedido(); }
+function seletorZap(){
+  var m = modoZap();
+  return '<div class="field"><label for="modo-zap">Abrir WhatsApp no</label><select id="modo-zap" onchange="trocarModoZap(this.value)">' +
+    '<option value="web"' + (m === 'web' ? ' selected' : '') + '>WhatsApp Web (navegador)</option>' +
+    '<option value="app"' + (m === 'app' ? ' selected' : '') + '>Aplicativo do WhatsApp no computador</option></select></div>';
+}
+function abrirZap(tipo){
+  var num = S.pedido.cliente.whatsapp, txt = encodeURIComponent(textoDe(tipo));
+  if (modoZap() === 'app') window.location.href = 'whatsapp://send?phone=' + num + '&text=' + txt;
+  else window.open('https://web.whatsapp.com/send?phone=' + num + '&text=' + txt, 'whatsapp_web'); // reaproveita a mesma aba
+  S.zapPendente = tipo; renderPedido();   // só registra depois que a operadora confirmar que enviou
+}
+function confirmarZap(enviou){
+  var tipo = S.zapPendente; S.zapPendente = '';
+  if (!enviou) { renderPedido(); return; }
+  api('api_registrarWhatsApp', S.pedido.chave, textoDe(tipo), tipo)
+    .then(function(p){ aposAcao(p, 'Mensagem do WhatsApp registrada no histórico.'); })
+    .catch(alertar);
+}
+function barraZap(tipo){
+  if (S.zapPendente !== tipo) return '';
+  return '<div class="confirma" role="status">Você enviou a mensagem no WhatsApp?' +
+    '<button type="button" class="btn primary" onclick="confirmarZap(true)">Sim, enviei</button>' +
+    '<button type="button" class="btn" onclick="confirmarZap(false)">Não enviei</button></div>';
+}
+function desfazerSat(){
+  if (!confirm('Desfazer a marcação de satisfação deste pedido?')) return;
+  api('api_desfazerSatisfacao', S.pedido.chave).then(function(p){ aposAcao(p, 'Marcação desfeita.'); }).catch(alertar);
+}
+function dispensarSat(){
+  if (!confirm('Não enviar a mensagem de satisfação para este pedido?')) return;
+  api('api_dispensarSatisfacao', S.pedido.chave).then(function(p){ aposAcao(p, 'Satisfação dispensada.'); }).catch(alertar);
+}
+function cardSatisfacao(p){
+  if (!p.entregue) return '';
+  var est = { pendente: '<span class="sat pendente">Pendente</span>', enviada: '<span class="sat enviada">Enviada em ' + esc(p.satisfacaoEm) + '</span>',
+              dispensada: '<span class="sat dispensada">Dispensada em ' + esc(p.satisfacaoEm) + '</span>', fora_janela: '<span class="sat dispensada">Não enviada</span>' }[p.satisfacao] || '';
+  var temZap = !!p.cliente.whatsapp, temMail = !!p.cliente.email;
+  return '<section class="card pad" aria-labelledby="t-sat"><div class="between" style="align-items:center"><h2 id="t-sat">Satisfação</h2>' + est + '</div>' +
+    '<p class="small" style="margin:0">Pedido entregue' + (p.entregueEm ? ' em ' + esc(p.entregueEm) : '') + '. Mande uma mensagem para saber se chegou tudo certo.</p>' +
+    '<label class="sr" for="msg-sat">Mensagem de satisfação</label><textarea id="msg-sat" rows="8" oninput="S.msgSat=this.value">' + esc(S.msgSat) + '</textarea>' +
+    '<div class="row">' +
+      '<button type="button" class="btn primary" id="b-mail-sat" onclick="enviarEmail(\'satisfacao\')"' + (temMail ? '' : ' disabled title="A LI não informou o e-mail"') + '>Enviar por e-mail</button>' +
+      '<button type="button" class="btn outline" onclick="abrirZap(\'satisfacao\')"' + (temZap ? '' : ' disabled title="A LI não informou um celular válido"') + '>Abrir no WhatsApp</button>' +
+      '<button type="button" class="btn" onclick="copiar(S.msgSat, this)">Copiar</button>' +
+      (p.satisfacao === 'pendente' ? '<button type="button" class="btn" onclick="dispensarSat()">Não enviar</button>' : '') +
+      (p.satisfacao === 'enviada' || p.satisfacao === 'dispensada' ? '<button type="button" class="btn" onclick="desfazerSat()">Desfazer marcação</button>' : '') +
+    '</div>' + barraZap('satisfacao') + seletorZap() + '</section>';
+}
+function copiar(texto, botao){
+  var feito = function(){ var t = botao.textContent; if (t) { botao.textContent = 'Copiado'; setTimeout(function(){ botao.textContent = t; }, 1500); } };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(feito, function(){ copiaAntiga(texto); feito(); });
+  else { copiaAntiga(texto); feito(); }
+}
+function copiaAntiga(texto){ var t = document.createElement('textarea'); t.value = texto; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(t); }
+function alertar(e){ alert('Não deu certo: ' + (e && e.message ? e.message : e)); }
+
+/* ---------------- RESOLVIDOS E ALTERAÇÕES ---------------- */
+function carregarResolvidos(){
+  view('<div class="loading">Carregando…</div>');
+  api('api_resolvidos').then(function(d){ S.res = d; cab(d); renderResolvidos(); }).catch(erro);
+}
+function renderResolvidos(){
+  var d = S.res, q = S.buscaRes.trim().toLowerCase(), hist = S.resModo === 'historico';
+  var casa = function(i){ return !q || (i.pedido + ' ' + (i.cliente || '') + ' ' + (i.codigo || '')).toLowerCase().indexOf(q) >= 0; };
+  var abas = '<div class="tabs" role="group" aria-label="O que mostrar">' +
+    '<button type="button" class="tab" aria-pressed="' + !hist + '" onclick="S.resModo=\'resolvidos\';renderResolvidos()">Resolvidos e encerrados (' + d.resolvidos.length + ')</button>' +
+    '<button type="button" class="tab" aria-pressed="' + hist + '" onclick="S.resModo=\'historico\';renderResolvidos()">Todas as alterações</button></div>';
+  var corpo;
+  if (!hist) {
+    var lista = ordenar(d.resolvidos.filter(casa), 'res');
+    corpo = '<div class="thead g-res">' + ordenarCab('res', 'Pedido') + '<span>Cliente</span><span>Ocorrência</span><span>Status atual</span><span>Última anotação</span><span>Tratativa</span></div>' +
+      (lista.map(function(i){
+        return '<button type="button" class="trow g-res" onclick="ir(\'pedido\',\'' + esc(i.chave).replace(/\\/g,'\\\\') + '\')">' +
+          '<span class="cell"><span class="strong">#' + esc(i.pedido) + '</span><span class="small mono">' + esc(i.codigo) + '</span></span>' +
+          '<span class="cell"><span class="ell" style="font-weight:500">' + esc(i.cliente) + '</span><span class="small">' + esc(i.cidade) + '</span></span>' +
+          '<span class="cell"><span class="badge ' + (COR[i.ocorrenciaTipo] || 'b-grey') + '">' + esc(i.ocorrencia || '—') + '</span></span>' +
+          '<span class="cell"><span class="badge ' + (COR[i.tipo] || 'b-grey') + '">' + esc(i.statusAtual) + '</span></span>' +
+          '<span class="cell"><span class="clamp small" style="color:var(--ink2)">' + (esc(i.nota) || '—') + '</span></span>' +
+          '<span class="cell"><span class="tag">' + esc(i.situacaoLabel) + '</span><span class="small">' + esc(i.quando) + (i.por ? ' · ' + esc(i.por.split('@')[0]) : '') + '</span></span></button>';
+      }).join('') || '<p class="empty">Nenhum caso resolvido ou encerrado ainda.</p>');
+  } else {
+    var h = d.historico.filter(casa);
+    corpo = '<div class="thead g-hist"><span>Quando</span><span>Pedido</span><span>Cliente</span><span>O que mudou</span><span>Detalhe</span><span>Quem</span></div>' +
+      (h.map(function(i){
+        return '<button type="button" class="trow g-hist" onclick="ir(\'pedido\',\'' + esc(i.chave).replace(/\\/g,'\\\\') + '\')">' +
+          '<span class="small" style="color:var(--ink2)">' + esc(i.quando) + '</span><span class="strong">#' + esc(i.pedido) + '</span>' +
+          '<span class="ell">' + esc(i.cliente) + '</span><span style="font-weight:500">' + esc(i.acao) + '</span>' +
+          '<span class="clamp small" style="color:var(--ink2)">' + esc(i.detalhe) + '</span><span class="small ell">' + esc((i.por || '').split('@')[0]) + '</span></button>';
+      }).join('') || '<p class="empty">Nenhuma alteração registrada ainda.</p>');
+  }
+  view(
+    '<button type="button" class="back" onclick="ir(\'ocorrencias\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Voltar para ocorrências</button>' +
+    '<div class="between"><div class="cell" style="gap:4px"><h1>Resolvidos e alterações</h1><p class="sub">' +
+      (hist ? 'Tudo que foi feito no app, do mais recente para o mais antigo: situação, anotação, e-mail, WhatsApp, gestão e satisfação.'
+            : 'Casos marcados como Resolvida ou Encerrada. Para reabrir, abra o pedido e escolha outra situação.') + '</p></div>' +
+      '<div class="field"><label for="busca-res">Buscar</label><input id="busca-res" type="search" placeholder="Pedido, código ou cliente" value="' + esc(S.buscaRes) + '" oninput="S.buscaRes=this.value;var p=this.selectionStart;renderResolvidos();var b=$(\'busca-res\');b.focus();b.setSelectionRange(p,p)"></div></div>' +
+    abas + '<section class="card table" aria-label="Lista">' + corpo + '</section>'
+  );
+}
+
+/* ---------------- PEDIDOS / SATISFAÇÃO ---------------- */
+var GRUPOS = [['todos','Todos'],['transito','Em trânsito'],['entregue','Entregues'],['ocorrencia','Com ocorrência'],['aguardando','Aguardando postagem']];
+function carregarPedidos(){
+  view('<div class="loading">Carregando pedidos…</div>');
+  api('api_pedidos').then(function(d){ S.lista = d; cab(d); renderPedidos(); }).catch(erro);
+}
+function renderPedidos(){
+  var d = S.lista, sat = S.tela === 'satisfacao', q = S.buscaPed.trim().toLowerCase();
+  if (sat && !S.satDe) { S.satDe = hojeISO(-6); S.satAte = hojeISO(0); }
+  var base = sat ? d.itens.filter(function(i){
+      if (S.satModo === 'pendente') return i.satisfacao === 'pendente';
+      return i.satisfacao === S.satModo && i.satisfacaoDia >= S.satDe && i.satisfacaoDia <= S.satAte;
+    }) : d.itens;
+  var conta = {}; base.forEach(function(i){ conta[i.grupo] = (conta[i.grupo] || 0) + 1; });
+  var semFunil = base.filter(function(i){ return sat || S.grupo === 'todos' || i.grupo === S.grupo; });
+  var lista = base.filter(function(i){
+    if (!sat && S.grupo !== 'todos' && i.grupo !== S.grupo) return false;
+    if (S.funil.ped && i.tipo !== S.funil.ped) return false;
+    if (q && (i.pedido + ' ' + i.codigo + ' ' + i.cliente).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  var chips = sat ? '' : '<div role="group" aria-label="Filtrar por situação" class="row">' + GRUPOS.map(function(g){
+    var n = g[0] === 'todos' ? base.length : (conta[g[0]] || 0);
+    return '<button type="button" class="chip" aria-pressed="' + (S.grupo === g[0]) + '" onclick="S.grupo=\'' + g[0] + '\';renderPedidos()">' + g[1] + ' <span class="n">' + n + '</span></button>';
+  }).join('') + '</div>';
+  lista = ordenar(lista, 'ped');
+  var linhas = lista.slice(0, 300).map(function(i){
+    var satTag = i.satisfacao === 'pendente' ? '<span class="sat pendente">Pendente</span>' : i.satisfacao === 'enviada' ? '<span class="sat enviada">Enviada ' + esc(i.satisfacaoEm) + '</span>' :
+                 i.satisfacao === 'dispensada' ? '<span class="sat dispensada">Dispensada ' + esc(i.satisfacaoEm) + '</span>' : '<span class="small">—</span>';
+    if (i.satisfacaoPor && i.satisfacao !== 'pendente') satTag += '<span class="small">por ' + esc(i.satisfacaoPor.split('@')[0]) + '</span>';
+    var envio = i.enviadoPor && i.enviadoPor.toLowerCase().indexOf(i.forma.toLowerCase()) < 0 ? esc(i.forma) + ' → ' + esc(i.enviadoPor) : esc(i.enviadoPor || i.forma);
+    return '<button type="button" class="trow g-ped' + (i.passou && !sat ? ' passou' : '') + '" onclick="ir(\'pedido\',\'' + esc(i.chave).replace(/\\/g,'\\\\') + '\')">' +
+      '<span class="cell"><span class="strong">#' + esc(i.pedido) + '</span><span class="small">' + (i.dataPedido ? 'pedido de ' + esc(i.dataPedido) : '') + '</span></span>' +
+      '<span class="cell"><span class="ell" style="font-weight:500">' + esc(i.cliente) + '</span><span class="small">' + esc(i.cidade) + '</span></span>' +
+      '<span class="cell"><span class="ell">' + envio + '</span><span class="mono small">' + esc(i.codigo) + '</span></span>' +
+      '<span class="cell"><span class="badge ' + (COR[i.tipo] || 'b-grey') + '">' + esc(i.status) + '</span>' + (i.entregueEm ? '<span class="small">em ' + esc(i.entregueEm) + '</span>' : '') + '</span>' +
+      '<span class="cell"><span' + (i.passou ? ' style="font-weight:700;color:var(--red)"' : '') + '>' + (i.dias == null ? '—' : i.dias + (i.dias === 1 ? ' dia útil' : ' dias úteis')) + '</span><span class="small">' + (i.prazo ? 'prazo ' + i.prazo : '') + '</span></span>' +
+      '<span class="cell" style="gap:4px">' + satTag + '</span></button>';
+  }).join('');
+  view(
+    '<div class="between"><div class="cell" style="gap:4px"><h1>' + (sat ? 'Satisfação' : 'Pedidos') + '</h1><p class="sub">' +
+      (sat ? (S.satModo === 'pendente' ? base.length + ' pedidos entregues nos últimos ' + d.janelaSatisfacao + ' dias ainda sem mensagem de satisfação'
+                : base.length + ' mensage' + (base.length === 1 ? 'm ' : 'ns ') + (S.satModo === 'enviada' ? 'enviada' : 'dispensada') + (base.length === 1 ? '' : 's') + ' no período escolhido (1 por pedido)')
+           : 'Todos os pedidos acompanhados (SEDEX, PAC e Jadlog), do mais recente para o mais antigo') + '</p></div>' +
+      '<div class="field"><label for="busca-ped">Buscar</label><input id="busca-ped" type="search" placeholder="Pedido, código de rastreio ou cliente" value="' + esc(S.buscaPed) + '" oninput="S.buscaPed=this.value;renderPedidosFoco()"></div></div>' +
+    chips + (sat ? filtrosSatisfacao(d) : '') +
+    '<section class="card table" aria-label="Lista de pedidos">' +
+      '<div class="thead g-ped">' + ordenarCab('ped', 'Pedido') + '<span>Cliente</span><span>Envio</span>' + funil('ped', semFunil) + '<span>Em trânsito</span><span>Satisfação</span></div>' +
+      (linhas || '<p class="empty">' + (sat ? 'Nenhuma mensagem de satisfação pendente.' : 'Nenhum pedido encontrado.') + '</p>') +
+      (lista.length > 300 ? '<p class="note" style="padding:14px 20px;margin:0">Mostrando 300 de ' + lista.length + '. Use a busca para achar um pedido específico.</p>' : '') +
+    '</section>' +
+    (sat ? '<p class="note">Cada pedido conta uma vez: ao enviar por e-mail ou confirmar o envio no WhatsApp, ele sai de Pendentes e vai para Enviadas, com data, hora e quem enviou. Marcou errado? Abra o pedido e use "Desfazer marcação". Pedidos entregues há mais de ' + d.janelaSatisfacao + ' dias não entram em Pendentes.</p>' : '')
+  );
+}
+function filtrosSatisfacao(d){
+  var n = { pendente: 0, enviada: 0, dispensada: 0 };
+  d.itens.forEach(function(i){ if (n[i.satisfacao] != null) n[i.satisfacao]++; });
+  var aba = function(m, rot){ return '<button type="button" class="tab" aria-pressed="' + (S.satModo === m) + '" onclick="S.satModo=\'' + m + '\';renderPedidos()">' + rot +
+    (m === 'pendente' ? ' (' + n.pendente + ')' : '') + '</button>'; };
+  return '<div class="row" style="align-items:flex-end">' +
+    '<div class="tabs" role="group" aria-label="Situação da satisfação">' + aba('pendente', 'Pendentes') + aba('enviada', 'Enviadas') + aba('dispensada', 'Não enviadas') + '</div>' +
+    (S.satModo === 'pendente' ? '' :
+      '<div class="field"><label for="sat-de">Enviada de</label><input id="sat-de" type="date" value="' + S.satDe + '" onchange="S.satDe=this.value;renderPedidos()"></div>' +
+      '<div class="field"><label for="sat-ate">até</label><input id="sat-ate" type="date" value="' + S.satAte + '" onchange="S.satAte=this.value;renderPedidos()"></div>' +
+      '<button type="button" class="tab" onclick="S.satDe=hojeISO(0);S.satAte=hojeISO(0);renderPedidos()">Hoje</button>' +
+      '<button type="button" class="tab" onclick="S.satDe=hojeISO(-6);S.satAte=hojeISO(0);renderPedidos()">7 dias</button>' +
+      '<button type="button" class="tab" onclick="S.satDe=hojeISO(-29);S.satAte=hojeISO(0);renderPedidos()">30 dias</button>') +
+    '</div>';
+}
+function renderPedidosFoco(){
+  var pos = $('busca-ped').selectionStart; renderPedidos(); var b = $('busca-ped'); b.focus(); b.setSelectionRange(pos, pos);
+}
+
+/* ---------------- PAINEL ---------------- */
+function carregarPainel(){
+  view('<div class="loading">Carregando painel…</div>');
+  api('api_painel', S.painelDias).then(function(d){ S.painel = d; S.painelDias = d.dias; cab(d); renderPainel(); }).catch(erro);
+}
+function renderPainel(){
+  var d = S.painel, k = d.indicadores;
+  var kpi = function(rot, v, cls){ return '<div class="card kpi"><span class="small" style="color:var(--muted)">' + rot + '</span><span class="v"' + (cls ? ' style="color:var(--' + cls + ')"' : '') + '>' + v + '</span></div>'; };
+  var formas = d.formas.map(function(f){
+    return '<div class="forma"><span class="strong">' + esc(f.nome) + '</span><div class="bar" role="img" aria-label="' + (f.pct == null ? 'sem dados' : f.pct + '% no prazo') + '"><div style="width:' + (f.pct || 0) + '%"></div></div>' +
+      '<span class="strong" style="text-align:right">' + (f.pct == null ? '—' : f.pct + '%') + '</span><span class="small">' + f.entregues + ' entregues' + (f.media != null ? ' · média ' + String(f.media).replace('.', ',') + ' dias úteis' : '') + '</span></div>';
+  }).join('') || '<p class="small" style="margin:0">Ainda sem entregas no período.</p>';
+  var abas = ['todas','SEDEX','PAC','Jadlog'].map(function(a){ return '<button type="button" class="tab" aria-pressed="' + (S.abaForma === a) + '" onclick="S.abaForma=\'' + a + '\';renderPainel()">' + (a === 'todas' ? 'Todas' : a) + '</button>'; }).join('');
+  var porForma = d.lista.filter(function(r){ return S.abaForma === 'todas' || r.grupo === S.abaForma; });
+  var lista = ordenar(porForma.filter(function(r){ return !S.funil.pai || r.tipo === S.funil.pai; }), 'pai').map(function(r){
+    return '<button type="button" class="trow g-env' + (r.passou ? ' passou' : '') + '" onclick="ir(\'pedido\',\'' + esc(r.chave).replace(/\\/g,'\\\\') + '\')">' +
+      '<span class="strong">#' + esc(r.pedido) + '</span><span class="ell">' + esc(r.forma) + '</span><span class="mono small ell" style="color:var(--ink2)">' + esc(r.codigo) + '</span>' +
+      '<span>' + esc(r.vinculo) + '</span><span' + (r.passou ? ' style="font-weight:700;color:var(--red)"' : '') + '>' + (r.dias == null ? '—' : r.dias + (r.dias === 1 ? ' dia útil' : ' dias úteis')) + '</span>' +
+      '<span>' + (r.prazo ? r.prazo + ' dias úteis' : '—') + '</span><span class="badge ' + (COR[r.tipo] || 'b-grey') + '">' + esc(r.status) + '</span></button>';
+  }).join('');
+  view(
+    '<div class="between"><div class="cell" style="gap:4px"><h1>Painel e envios</h1>' +
+      '<p class="sub" style="display:flex;align-items:center;flex-wrap:wrap">Pedidos enviados nos últimos <label class="sr" for="dias">Quantidade de dias úteis</label>' +
+      '<input id="dias" class="inline-num" type="number" min="1" max="120" value="' + d.dias + '" onchange="S.painelDias=this.value;carregarPainel()" onkeydown="if(event.key===\'Enter\'){this.blur()}">' +
+      ' dias úteis · prazos em dias úteis</p>' + (d.dadosDesde ? '<span class="small">Há dados a partir de ' + esc(d.dadosDesde) + '</span>' : '') + '</div></div>' +
+    '<section class="kpis" aria-label="Indicadores">' +
+      kpi('Em trânsito agora', k.emTransito) + kpi('Entregues no período', k.entregues) +
+      kpi('Entregues no prazo LI', k.noPrazoPct == null ? '—' : k.noPrazoPct + '%', 'green') +
+      kpi('Ocorrências abertas', k.ocorrencias + (k.gestao ? ' <span class="u">· ' + k.gestao + ' c/ gestão</span>' : ''), 'red') +
+      kpi('Tempo médio de entrega', k.mediaDias == null ? '—' : String(k.mediaDias).replace('.', ',') + ' <span class="u">dias úteis</span>') +
+    '</section>' +
+    '<section class="card pad" aria-labelledby="t-f"><h2 id="t-f">Entregas no prazo por forma de envio</h2>' + formas + '</section>' +
+    '<section class="card table" aria-labelledby="t-e"><div class="between" style="padding:16px 20px;border-bottom:1px solid var(--line);align-items:center"><h2 id="t-e">Envios</h2><div class="tabs" role="group" aria-label="Filtrar por forma de envio">' + abas + '</div></div>' +
+      '<div class="thead g-env">' + ordenarCab('pai', 'Pedido LI') + '<span>Forma de envio</span><span>Código de rastreio</span><span>Vínculo</span><span>Dias em trânsito</span><span>Prazo LI</span>' + funil('pai', porForma) + '</div>' +
+      (lista || '<p class="empty">Nenhum envio nesse filtro.</p>') +
+      '<p class="note" style="padding:14px 20px;margin:0">Fundo vermelho = passou do prazo LI. Clique no pedido para abrir o detalhe.</p></section>'
+  );
+}
+
+ir('ocorrencias');
+</script>
+</body>
+</html>
