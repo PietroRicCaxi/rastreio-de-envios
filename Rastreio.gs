@@ -49,6 +49,7 @@ function calcularAtualizacao_(o, norm, statusBase, agora, descricaoExtra) {
   o['Finalizado'] = def.final ? 'SIM' : '';
   o['Última verificação'] = new Date(agora);
   o['Observação'] = norm.nota || (norm.erro && !eventos.length ? norm.erro : '');
+  if (norm.recebedor) o['Recebido por'] = norm.recebedor;
 
   return { linha: o, mudou: novo !== anterior, statusAnterior: anterior, statusNovo: novo, descricao: descricao };
 }
@@ -96,7 +97,9 @@ function atualizarRastreios() {
     // 1) Envios que passaram da janela máxima → encerra monitoramento com alerta
     const ativos = [];
     abertos.forEach(function (o) {
-      if (o['Data vínculo'] && diasEntre_(o['Data vínculo'], agora) > CONFIG.JANELA_MAX_DIAS) {
+      // pedido antigo que entrou por chargeback é consultado ao menos uma vez (para ter a prova de entrega)
+      const chargebackNovo = o['Chargeback'] && !o['Última verificação'];
+      if (!chargebackNovo && o['Data vínculo'] && diasEntre_(o['Data vínculo'], agora) > CONFIG.JANELA_MAX_DIAS) {
         const res = { mudou: o['Status código'] !== 'SEM_CONCLUSAO', statusAnterior: o['Status código'], statusNovo: 'SEM_CONCLUSAO',
                       descricao: 'Mais de ' + CONFIG.JANELA_MAX_DIAS + ' dias sem conclusão — verificar manualmente' };
         o['Status código'] = 'SEM_CONCLUSAO'; o['Status'] = STATUS.SEM_CONCLUSAO.rotulo; o['Alerta'] = STATUS.SEM_CONCLUSAO.rotulo;
@@ -251,6 +254,10 @@ function atualizarRastreios() {
               if (motivo) { base = motivo.status; descricao = 'Melhor Envio: ' + motivo.texto; }
             } catch (e) { log_('atualizarRastreios/ME', 'Detalhe da etiqueta ' + o['ID Melhor Envio'] + ': ' + e.message); }
           }
+          // entregue: o detalhe da etiqueta pode trazer quem recebeu (consulta uma vez só, na entrega)
+          if (base === 'ENTREGUE' && !norm.recebedor && !o['Recebido por'] && tempoOk()) {
+            try { norm.recebedor = extrairRecebedor_(meDetalhe_(o['ID Melhor Envio'])); } catch (e) {}
+          }
           registrar(o, calcularAtualizacao_(o, norm, base, agora, descricao));
         });
       } catch (e) { erros++; log_('atualizarRastreios/ME', 'Erro: ' + e.message); }
@@ -273,3 +280,14 @@ function atualizarRastreios() {
     }
   }
 }
+
+/**
+ * Quem recebeu um envio já entregue, consultando a transportadora de novo (Correios ou detalhe da etiqueta do ME).
+ * Usado quando o pedido entra em chargeback e a entrega é anterior a esta funcionalidade.
+ */
+function buscarRecebedor_(o) {
+  if (o['Rota'] === 'CORREIOS_API' && correiosDisponivel_()) return correiosRastrear_(o['Código rastreio']).recebedor || '';
+  if (o['ID Melhor Envio']) return extrairRecebedor_(meDetalhe_(o['ID Melhor Envio']));
+  return '';
+}
+
