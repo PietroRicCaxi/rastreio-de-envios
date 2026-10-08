@@ -48,12 +48,29 @@ function liIdSituacao_(codigo) {
     'e ajuste CONFIG.LI_SITUACAO_ENVIADO com o código correto.');
 }
 
+/** Lista de situações da LI ({id, codigo, nome}), guardada por 6 h. */
+function liSituacoes_() {
+  const cache = CacheService.getScriptCache();
+  const salvo = cache.get('LI_SITUACOES');
+  if (salvo) return JSON.parse(salvo);
+  const resp = liGet_('/situacao/', { limit: 100 });
+  const lista = ((resp && (resp.objects || resp)) || []).map(function (x) {
+    return { id: String(x.id), codigo: x.codigo || '', nome: x.nome || '' };
+  });
+  cache.put('LI_SITUACOES', JSON.stringify(lista), 6 * 60 * 60);
+  return lista;
+}
+
+/** Situações da LI que contam como chargeback / pagamento em disputa (ver CONFIG.LI_SITUACOES_CHARGEBACK). */
+function liSituacoesChargeback_() {
+  return liSituacoes_().filter(function (x) { return ehSituacaoChargeback_(x); });
+}
+
 /**
- * Lista os números dos pedidos com situação "Enviado" que foram ATUALIZADOS desde `desde`.
+ * Lista os números dos pedidos de uma situação que foram ATUALIZADOS desde `desde`.
  * É isso que evita puxar os pedidos antigos (2022+): só entra o que mudou recentemente.
  */
-function liListarEnviadosDesde_(desde) {
-  const idSit = liIdSituacao_(CONFIG.LI_SITUACAO_ENVIADO);
+function liListarPorSituacaoDesde_(idSit, desde) {
   const numeros = [];
   let offset = 0;
   const limit = 50;
@@ -74,6 +91,11 @@ function liListarEnviadosDesde_(desde) {
     if (offset > 5000) break; // trava de segurança
   }
   return numeros;
+}
+
+/** Pedidos "Enviado" atualizados desde `desde`. */
+function liListarEnviadosDesde_(desde) {
+  return liListarPorSituacaoDesde_(liIdSituacao_(CONFIG.LI_SITUACAO_ENVIADO), desde);
 }
 
 function liDetalhePedido_(numero) {
@@ -109,7 +131,8 @@ function liResumoPedido_(p) {
     dataModificacao: p.data_modificacao || '',
     cliente: cliente.nome || end.nome || '',
     cidadeUf: [end.cidade, end.estado].filter(Boolean).join('/'),
-    situacaoCodigo: (typeof sit === 'object') ? (sit.codigo || '') : String(sit)
+    situacaoCodigo: (typeof sit === 'object') ? (sit.codigo || '') : String(sit),
+    situacaoNome: (typeof sit === 'object') ? (sit.nome || '') : ''
   };
 }
 
