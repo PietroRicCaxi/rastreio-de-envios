@@ -68,10 +68,20 @@ const CONFIG = {
   // até testar. Ligar isso também "limpa" a LI: pedidos entregues deixam de ficar como Enviado.
   ATUALIZAR_LI_QUANDO_ENTREGUE: false,
 
+  // ---------- CHARGEBACK ----------
+  // Pedidos que a LI marcar como chargeback / pagamento em disputa viram ocorrência no app,
+  // com a prova de entrega (data e quem recebeu) à mão para contestar.
+  // Vazio = o sistema reconhece sozinho as situações da LI cujo código ou nome tenha uma das PALAVRAS abaixo.
+  // Para fixar, coloque os códigos exatos (veja em Diagnóstico: Loja Integrada), ex.: ['pagamento_em_disputa'].
+  LI_SITUACOES_CHARGEBACK: [],
+  PALAVRAS_CHARGEBACK: ['chargeback', 'disputa', 'contestad', 'contestac'],
+  // Na primeira verificação, olha pedidos que entraram nessas situações nos últimos X dias
+  DIAS_RETROATIVOS_CHARGEBACK: 120,
+
   // ---------- EXECUÇÃO ----------
   LIMITE_TEMPO_MS: 5 * 60 * 1000,   // Apps Script corta em 6 min; paramos em 5 com folga
-  ME_MAX_PAGINAS_BUSCA: 60,
-  ME_MAX_BUSCAS_NOME: 40,           // buscas por nome do cliente no ME por execução (quando o código não é achado)         // páginas da lista de etiquetas do ME varridas por execução para achar códigos novos
+  ME_MAX_PAGINAS_BUSCA: 60,         // páginas da lista de etiquetas do ME varridas por execução para achar códigos novos
+  ME_MAX_BUSCAS_NOME: 40,           // buscas por nome do cliente no ME por execução (quando o código não é achado)
   PAUSA_ENTRE_CHAMADAS_MS: 200,
 
   ABAS: {
@@ -88,7 +98,7 @@ const COLUNAS_ENVIOS = [
   'Rota', 'Código rastreio', 'Data vínculo', 'ID Melhor Envio', 'Status', 'Alerta', 'Último evento',
   'Data último evento', 'Local', 'Data postagem', 'Previsão entrega', 'Dias em trânsito',
   'Finalizado', 'Última verificação', 'Link rastreio', 'Observação', 'Status código', 'Prazo LI (dias úteis)',
-  'Encontrado via', 'Enviado por', 'Código transportadora', 'Nota busca'
+  'Encontrado via', 'Enviado por', 'Código transportadora', 'Nota busca', 'Recebido por', 'Chargeback'
 ];
 
 /** Lê uma propriedade do script. */
