@@ -3,6 +3,7 @@
  *
  *  instalar()             → roda UMA vez: cria abas, define a data de corte e agenda tudo
  *  sincronizarPedidosLI() → a cada 15 min: pega pedidos que viraram "Enviado" na LI
+ *                           e os que entraram em chargeback / disputa
  *  atualizarRastreios()   → a cada 1 h: consulta Correios / Melhor Envio (Rastreio.gs)
  *  resumoDiario()         → todo dia às 8h: e-mail com o panorama
  */
@@ -12,6 +13,7 @@ function onOpen() {
     .addItem('Buscar novos pedidos da LI agora', 'sincronizarPedidosLI')
     .addItem('Atualizar rastreios agora', 'atualizarRastreios')
     .addItem('Atualizar aba Resumo', 'atualizarResumo')
+    .addItem('Verificar chargebacks na LI agora', 'verificarChargebacks')
     .addItem('Limpar alertas que já não valem', 'sincronizarAlertas')
     .addItem('Enviar resumo por e-mail agora', 'resumoDiario')
     .addSeparator()
@@ -73,6 +75,7 @@ function sincronizarPedidosLI() {
 
     const reg = lerEnvios_();
     const fila = filaLer_();
+    let chargebacks = 0;
     numeros.forEach(function (n) {
       if (!reg.porPedido[n] && fila.indexOf(n) < 0) fila.push(n);
     });
@@ -91,24 +94,7 @@ function sincronizarPedidosLI() {
         const chave = numero + '|' + e.codigo;
         if (reg.porChave[chave]) return;
         reg.porChave[chave] = true;
-        const rota = decidirRota_(e.codigo, e.formaNome, e.formaCodigo, correiosOk);
-        const linha = {};
-        COLUNAS_ENVIOS.forEach(function (c) { linha[c] = ''; });
-        Object.assign(linha, {
-          'Chave': chave,
-          'Pedido LI': numero,
-          'Data pedido': parseDataLi_(r.dataPedido) || '',
-          'Cliente': r.cliente,
-          'Cidade/UF': r.cidadeUf,
-          'Forma de envio': e.formaNome || e.formaCodigo,
-          'Rota': rota,
-          'Código rastreio': e.codigo,
-          'Data vínculo': parseDataLi_(e.dataEnvio) || parseDataLi_(r.dataModificacao) || new Date(),
-          'Status': STATUS.NOVO.rotulo,
-          'Status código': 'NOVO',
-          'Link rastreio': linkRastreio_(rota, e.codigo),
-          'Prazo LI (dias úteis)': e.prazoDias || ''
-        });
+        const linha = novaLinhaEnvio_(numero, r, e, decidirRota_(e.codigo, e.formaNome, e.formaCodigo, correiosOk));
         if (!linha['Data pedido']) log_('sincronizarPedidosLI', 'Pedido ' + numero + ': data do pedido ilegível na LI: ' +
                                          JSON.stringify(r.dataPedido).substring(0, 80));
         novos.push(linha);
@@ -138,14 +124,148 @@ function sincronizarPedidosLI() {
     adicionarEnvios_(novos);
     adicionados = novos.length;
     filaSalvar_(fila);
+
+    // Chargeback / pagamento em disputa (depois de gravar os novos, para achar as linhas deles)
+    try { chargebacks = verificarChargebacks_(); } catch (e) { log_('verificarChargebacks', 'ERRO: ' + e.message); }
     log_('sincronizarPedidosLI', 'desde=' + desde + ' encontrados=' + numeros.length + ' detalhados=' + processados +
-         ' novos envios=' + adicionados + ' ignorados (outras formas)=' + ignorados + ' fila restante=' + fila.length + ' datas consertadas=' + consertados.length);
+         ' novos envios=' + adicionados + ' ignorados (outras formas)=' + ignorados + ' fila restante=' + fila.length + ' datas consertadas=' + consertados.length + ' chargebacks novos=' + chargebacks);
   } catch (e) {
     log_('sincronizarPedidosLI', 'ERRO: ' + e.message);
     throw e;
   } finally {
     lock.releaseLock();
   }
+}
+
+/** Linha nova da aba Envios para um código de rastreio de um pedido da LI. */
+function novaLinhaEnvio_(numero, r, e, rota) {
+  const linha = {};
+  COLUNAS_ENVIOS.forEach(function (c) { linha[c] = ''; });
+  Object.assign(linha, {
+    'Chave': numero + '|' + e.codigo,
+    'Pedido LI': numero,
+    'Data pedido': parseDataLi_(r.dataPedido) || '',
+    'Cliente': r.cliente,
+    'Cidade/UF': r.cidadeUf,
+    'Forma de envio': e.formaNome || e.formaCodigo,
+    'Rota': rota,
+    'Código rastreio': e.codigo,
+    'Data vínculo': parseDataLi_(e.dataEnvio) || parseDataLi_(r.dataModificacao) || new Date(),
+    'Status': STATUS.NOVO.rotulo,
+    'Status código': 'NOVO',
+    'Link rastreio': linkRastreio_(rota, e.codigo),
+    'Prazo LI (dias úteis)': e.prazoDias || ''
+  });
+  return linha;
+}
+
+/* ---------------------------- CHARGEBACK ---------------------------- */
+
+/** Item de menu: verifica agora os pedidos em chargeback / disputa na LI. */
+function verificarChargebacks() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) { log_('verificarChargebacks', 'Outra execução em andamento — tente de novo em instantes.'); return; }
+  try {
+    garantirAbas_();
+    const n = verificarChargebacks_();
+    log_('verificarChargebacks', n + ' chargeback(s) novo(s)');
+    try { SpreadsheetApp.getActive().toast(n + ' chargeback(s) novo(s)', 'Rastreio'); } catch (e) {}
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Busca na LI os pedidos que entraram em chargeback / pagamento em disputa desde a última checagem.
+ * - Pedido já acompanhado: marca a coluna "Chargeback" e completa "Recebido por" se já foi entregue.
+ * - Pedido fora da planilha (ex.: antigo): cria as linhas com os códigos dele para buscar a prova de entrega.
+ * Gera alerta (aba Alertas + e-mail) e o caso entra na fila de ocorrências do app.
+ * Devolve quantos pedidos novos em chargeback foram encontrados.
+ */
+function verificarChargebacks_() {
+  const sits = liSituacoesChargeback_();
+  if (!sits.length) {
+    const cache = CacheService.getScriptCache();
+    if (!cache.get('AVISO_SEM_SIT_CHARGEBACK')) {
+      cache.put('AVISO_SEM_SIT_CHARGEBACK', '1', 24 * 60 * 60);
+      log_('verificarChargebacks', 'Nenhuma situação de chargeback/disputa reconhecida na LI. ' +
+           'Rode "Diagnóstico: Loja Integrada" e coloque o código certo em CONFIG.LI_SITUACOES_CHARGEBACK.');
+    }
+    return 0;
+  }
+  const agora = new Date();
+  const desde = prop_('ULTIMA_CHARGEBACK_LI') ||
+    Utilities.formatDate(new Date(agora.getTime() - CONFIG.DIAS_RETROATIVOS_CHARGEBACK * 86400000), CONFIG.FUSO, 'yyyy-MM-dd HH:mm:ss');
+  const achados = {};   // número do pedido → nome da situação na LI
+  sits.forEach(function (sit) {
+    liListarPorSituacaoDesde_(sit.id, desde).forEach(function (n) { achados[n] = sit.nome || sit.codigo; });
+  });
+  setProp_('ULTIMA_CHARGEBACK_LI', Utilities.formatDate(new Date(agora.getTime() - 10 * 60000), CONFIG.FUSO, 'yyyy-MM-dd HH:mm:ss'));
+  const numeros = Object.keys(achados);
+  if (!numeros.length) return 0;
+
+  const reg = lerEnvios_();
+  const porPedido = {};
+  reg.linhas.forEach(function (o) { (porPedido[String(o['Pedido LI'])] = porPedido[String(o['Pedido LI'])] || []).push(o); });
+  const correiosOk = correiosDisponivel_();
+  const alterados = [], novos = [], alertas = [];
+  let pedidosNovos = 0;
+
+  numeros.forEach(function (numero) {
+    let linhas = porPedido[numero] || [];
+    if (linhas.every(function (o) { return o['Chargeback']; }) && linhas.length) return;  // já sinalizado antes
+    try {
+      if (!linhas.length) {
+        const p = liDetalhePedido_(numero);
+        if (!p) return;
+        const r = liResumoPedido_(p);
+        linhas = liExtrairEnvios_(p).map(function (e) {
+          return novaLinhaEnvio_(numero, r, e, decidirRota_(e.codigo, e.formaNome, e.formaCodigo, correiosOk));
+        });
+        if (!linhas.length) {  // sem código de rastreio na LI: entra só para virar ocorrência
+          const l = novaLinhaEnvio_(numero, r, { codigo: '', formaNome: '', formaCodigo: '', dataEnvio: '' }, '');
+          l['Chave'] = numero + '|SEM-RASTREIO';
+          l['Status código'] = 'SEM_RASTREIO'; l['Status'] = STATUS.SEM_RASTREIO.rotulo;
+          l['Finalizado'] = 'SIM'; l['Link rastreio'] = '';
+          linhas = [l];
+        }
+        linhas.forEach(function (l) { novos.push(l); });
+      }
+      pedidosNovos++;
+      linhas.forEach(function (o) {
+        if (o['Chargeback']) return;
+        o['Chargeback'] = achados[numero] + ' · ' + fmtData_(agora, 'dd/MM/yyyy');
+        if (o['Status código'] === 'ENTREGUE' && !o['Recebido por']) {
+          try { o['Recebido por'] = buscarRecebedor_(o); } catch (e) {}
+        }
+        if (o._linha) alterados.push(o);
+        alertas.push([agora, numero, o['Cliente'], o['Código rastreio'], o['Rota'], STATUS.CHARGEBACK.rotulo,
+                      descricaoChargeback_(o, achados[numero]), o['Link rastreio'], false, '']);
+      });
+    } catch (e) {
+      log_('verificarChargebacks', 'Pedido ' + numero + ': ' + e.message);
+    }
+  });
+
+  salvarEnvios_(alterados);
+  adicionarEnvios_(novos);
+  registrarAlertas_(alertas);
+  enviarEmailRodada_(alertas, []);
+  return pedidosNovos;
+}
+
+/** Texto do alerta de chargeback, já com a prova de entrega quando houver. */
+function descricaoChargeback_(o, situacaoLi) {
+  let t = 'LI: ' + situacaoLi;
+  if (o['Status código'] === 'ENTREGUE') {
+    t += ' · entregue' + (o['Data último evento'] ? ' em ' + fmtData_(o['Data último evento'], 'dd/MM/yyyy') : '') +
+         (o['Recebido por'] ? ', recebido por ' + o['Recebido por'] : '');
+  } else if (o['Status código'] === 'SEM_RASTREIO') {
+    t += ' · pedido sem código de rastreio na LI';
+  } else {
+    t += ' · rastreio: ' + (o['Status'] || 'ainda não consultado');
+  }
+  return t;
 }
 
 /* ---------------------------- E-MAILS ---------------------------- */
@@ -174,8 +294,8 @@ function enviarEmailRodada_(alertas, entregas) {
   }
   if (entregas.length) {
     html += '<h3 style="font-family:Arial">✅ ' + entregas.length + ' entrega(s) confirmada(s)</h3>' +
-      tabelaHtml_(['Pedido', 'Cliente', 'Código', 'Dias em trânsito'],
-        entregas.map(function (o) { return [o['Pedido LI'], o['Cliente'], o['Código rastreio'], o['Dias em trânsito']]; }));
+      tabelaHtml_(['Pedido', 'Cliente', 'Código', 'Dias em trânsito', 'Recebido por'],
+        entregas.map(function (o) { return [o['Pedido LI'], o['Cliente'], o['Código rastreio'], o['Dias em trânsito'], o['Recebido por'] || '—']; }));
   }
   html += '<p style="font-family:Arial;font-size:12px;color:#666">Planilha: <a href="' + planilha_().getUrl() + '">abrir painel de rastreio</a></p>';
   const assunto = '[Rastreio] ' + (alertas.length ? alertas.length + ' alerta(s)' : '') +
