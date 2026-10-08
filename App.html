@@ -215,7 +215,8 @@ function escolherFunil(id, t){ S.funil[id] = t; S.funilAberto = ''; redesenhar()
 
 var COR = { EXTRAVIADO:'b-red', DEVOLVIDO:'b-red', EM_DEVOLUCAO:'b-red', PROBLEMA_ENTREGA:'b-red', TENTATIVA_FALHOU:'b-red',
             DESVIO:'b-orange', PARADO:'b-orange', ATRASADO:'b-amber', NAO_POSTADO:'b-amber', AGUARDANDO_RETIRADA:'b-info',
-            CANCELADO:'b-red', SEM_CONCLUSAO:'b-grey', ENTREGUE:'b-green', SAIU_PARA_ENTREGA:'b-info' };
+            CANCELADO:'b-red', SEM_CONCLUSAO:'b-grey', ENTREGUE:'b-green', SAIU_PARA_ENTREGA:'b-info',
+            CHARGEBACK:'b-red', SEM_RASTREIO:'b-grey' };
 
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function $(id){ return document.getElementById(id); }
@@ -335,7 +336,8 @@ function renderPedido(aviso){
   var forma = p.enviadoPor && p.enviadoPor.toLowerCase().indexOf(p.forma.toLowerCase()) < 0 ? esc(p.forma) + ' → ' + esc(p.enviadoPor) : esc(p.enviadoPor || p.forma);
   var tl = p.eventos.length ? '<ol class="tl">' + p.eventos.map(function(e){
       return '<li><div class="when"><span class="strong">' + esc(e.dia) + '</span><span class="small">' + esc(e.hora) + '</span></div>' +
-        '<div class="dot"><span></span><span></span></div><div class="cell"><span style="font-weight:500">' + esc(e.titulo) + '</span><span class="small">' + esc(e.local) + '</span></div></li>';
+        '<div class="dot"><span></span><span></span></div><div class="cell"><span style="font-weight:500">' + esc(e.titulo) + '</span>' +
+        (e.recebedor ? '<span class="small">Recebido por <b>' + esc(e.recebedor) + '</b></span>' : '') + '<span class="small">' + esc(e.local) + '</span></div></li>';
     }).join('') + '</ol>' : '<p class="small" style="margin:0">Sem eventos da transportadora.</p>';
   var sits = p.situacoes.map(function(s){
     return '<button type="button" class="sit" aria-pressed="' + (S.sitEscolhida === s.id) + '" onclick="S.sitEscolhida=\'' + s.id + '\';renderPedido()"><span class="r"></span>' + esc(s.label) + '</button>';
@@ -348,13 +350,17 @@ function renderPedido(aviso){
   view(
     '<button type="button" class="back" onclick="ir(S.origem)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Voltar para ' + NOMES_TELA[S.origem] + '</button>' +
     (aviso ? '<div class="ok" role="status">' + esc(aviso) + '</div>' : '') +
+    (p.chargeback ? '<div class="alert" role="note"><b>Chargeback na Loja Integrada:</b> ' + esc(p.chargeback) + '. ' +
+      (p.entregue ? 'Prova de entrega: entregue em ' + esc(p.entregueEm) + (p.recebidoPor ? ', recebido por <b>' + esc(p.recebidoPor) + '</b>' : ' (a transportadora não informou quem recebeu — veja o comprovante no rastreio completo)') + '.'
+                  : 'Rastreio: ' + esc(p.statusRastreio || '—') + '.') + '</div>' : '') +
     '<section class="card summary" aria-label="Resumo do pedido">' +
       '<div class="cell" style="gap:6px;min-width:260px">' +
-        '<div class="row" style="align-items:center"><h1>Pedido #' + esc(p.pedido) + '</h1><span class="badge ' + (COR[p.tipo] || 'b-grey') + '">' + esc(p.tipoLabel) + '</span></div>' +
+        '<div class="row" style="align-items:center"><h1>Pedido #' + esc(p.pedido) + '</h1><span class="badge ' + (COR[p.tipo] || 'b-grey') + '">' + esc(p.tipoLabel) + '</span>' +
+          (p.tipo !== p.tipoRastreio && p.statusRastreio ? '<span class="badge ' + (COR[p.tipoRastreio] || 'b-grey') + '">' + esc(p.statusRastreio) + '</span>' : '') + '</div>' +
         '<div class="row" style="align-items:center;gap:10px;color:var(--muted)"><span>' + forma + '</span><span aria-hidden="true">·</span>' +
           '<span class="mono" style="color:var(--ink)">' + esc(p.codigo) + '</span>' +
           '<button type="button" class="icon-btn" aria-label="Copiar código de rastreio" onclick="copiar(\'' + esc(p.codigo) + '\', this)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg></button></div>' +
-        '<span class="small">' + [p.dataPedido ? 'Pedido de ' + esc(p.dataPedido) : '', p.vinculo ? 'código vinculado na LI em ' + esc(p.vinculo) : '', p.entregueEm ? 'entregue em ' + esc(p.entregueEm) : ''].filter(Boolean).join(' · ') + '</span>' +
+        '<span class="small">' + [p.dataPedido ? 'Pedido de ' + esc(p.dataPedido) : '', p.vinculo ? 'código vinculado na LI em ' + esc(p.vinculo) : '', p.entregueEm ? 'entregue em ' + esc(p.entregueEm) : '', p.recebidoPor ? 'recebido por <b>' + esc(p.recebidoPor) + '</b>' : ''].filter(Boolean).join(' · ') + '</span>' +
         (p.observacao ? '<span class="small">' + esc(p.observacao) + '</span>' : '') +
       '</div>' +
       '<div class="row" style="margin-left:auto">' +
@@ -452,7 +458,7 @@ function dispensarSat(){
   api('api_dispensarSatisfacao', S.pedido.chave).then(function(p){ aposAcao(p, 'Satisfação dispensada.'); }).catch(alertar);
 }
 function cardSatisfacao(p){
-  if (!p.entregue) return '';
+  if (!p.entregue || p.chargeback) return '';  // compra contestada: sem pesquisa de satisfação
   var est = { pendente: '<span class="sat pendente">Pendente</span>', enviada: '<span class="sat enviada">Enviada em ' + esc(p.satisfacaoEm) + '</span>',
               dispensada: '<span class="sat dispensada">Dispensada em ' + esc(p.satisfacaoEm) + '</span>', fora_janela: '<span class="sat dispensada">Não enviada</span>' }[p.satisfacao] || '';
   var temZap = !!p.cliente.whatsapp, temMail = !!p.cliente.email;
