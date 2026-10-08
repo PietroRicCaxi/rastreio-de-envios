@@ -24,6 +24,8 @@ const STATUS = {
   CANCELADO:           { rotulo: 'Etiqueta cancelada',         alerta: true,  final: true },
   ENTREGUE:            { rotulo: 'Entregue',                   alerta: false, final: true },
   SEM_CONCLUSAO:       { rotulo: 'Sem conclusão (verificar)',  alerta: true,  final: true },
+  CHARGEBACK:          { rotulo: 'Chargeback (compra contestada)', alerta: true, final: false },
+  SEM_RASTREIO:        { rotulo: 'Sem código de rastreio',     alerta: false, final: true },
   NAO_LOCALIZADO_ME:   { rotulo: 'Etiqueta não localizada no ME', alerta: false, final: false },
   ERRO_CONSULTA:       { rotulo: 'Erro na consulta',           alerta: false, final: false },
   NOVO:                { rotulo: 'Novo (ainda não consultado)', alerta: false, final: false }
@@ -186,7 +188,7 @@ function aplicarRegrasDePrazo_(status, ctx, agora) {
 
 /**
  * Limpa o código digitado na LI: tira espaços, pontos e traços, e completa o "BR"
- * quando o código dos Correios foi salvo sem ele (ex.: "AD 898 469 526" → "AD898469526BR").
+ * quando o código dos Correios foi salvo sem ele (ex.: "AB 123 456 789" → "AB123456789BR").
  */
 function normalizarCodigo_(codigo) {
   let c = String(codigo === null || codigo === undefined ? '' : codigo).toUpperCase().replace(/[^A-Z0-9]/g, '');  // tira espaço, ponto, traço, colchete…
@@ -199,7 +201,7 @@ function ehCodigoCorreios_(codigo) {
   return /^[A-Z]{2}\d{9}[A-Z]{2}$/.test(String(codigo || '').toUpperCase());
 }
 
-/** Código de Jadlog (só números, ex.: 619446241) ou do Melhor Envio (ex.: ME262E09G98BR)? */
+/** Código de Jadlog (só números, ex.: 600000000) ou do Melhor Envio (ex.: ME123ABC45BR)? */
 function ehCodigoMelhorEnvio_(codigo) {
   const c = String(codigo || '').toUpperCase();
   return /^\d{8,15}$/.test(c) || /^ME[0-9A-Z]{6,}BR$/.test(c);
@@ -232,3 +234,59 @@ function formaMonitorada_(formaNome, formaCodigo, codigo, cfg) {
   const todas = cfg.FORMAS_CORREIOS.concat(cfg.FORMAS_MELHOR_ENVIO);
   return ehCodigoCorreios_(codigo) || todas.some(function (p) { return forma.indexOf(p) >= 0; });
 }
+
+/* ============================== QUEM RECEBEU ============================== */
+
+// Campos que guardam quem assinou/recebeu a entrega (comparados sem acento, maiúscula, "_" ou espaço).
+// "receiver"/"to" ficam de fora de propósito: nessas APIs costumam ser o DESTINATÁRIO, não quem recebeu.
+const CAMPOS_RECEBEDOR = ['recebedor', 'nomerecebedor', 'recebedornome', 'nomedorecebedor', 'recebidopor', 'receivedby'];
+
+/**
+ * Procura o nome de quem recebeu a entrega em um evento/objeto bruto da transportadora.
+ * Aceita campo próprio ({recebedor: {nome}} / {recebedor: "Nome"}) ou texto "Recebido por: Nome".
+ * Nunca devolve documento (só números): CPF/RG do recebedor não é guardado.
+ */
+function extrairRecebedor_(obj) {
+  let achado = '';
+  const limpar = function (v) {
+    const t = String(v || '').replace(/\s+/g, ' ').trim();
+    if (t.length < 2 || t.length > 80 || /^[\d.\-\/\s]+$/.test(t)) return '';
+    return t;
+  };
+  const andar = function (v, prof) {
+    if (achado || prof > 6 || v === null || v === undefined) return;
+    if (typeof v === 'string') {
+      const m = v.match(/recebid[oa]\s+por\s*:?\s*([A-Za-zÀ-ÿ'´`. ]{3,60})/i);
+      if (m) achado = limpar(m[1].replace(/\s+(em|no|na|às|as)\s*$/i, ''));
+      return;
+    }
+    if (Array.isArray(v)) { v.forEach(function (x) { andar(x, prof + 1); }); return; }
+    if (typeof v !== 'object') return;
+    const chaves = Object.keys(v);
+    for (let i = 0; i < chaves.length && !achado; i++) {
+      const k = normalizarTexto_(chaves[i]).replace(/[^a-z]/g, '');
+      if (CAMPOS_RECEBEDOR.indexOf(k) < 0) continue;
+      const val = v[chaves[i]];
+      achado = limpar(val && typeof val === 'object' ? (val.nome || val.name || val.nomeRecebedor || '') : val);
+    }
+    for (let i = 0; i < chaves.length && !achado; i++) andar(v[chaves[i]], prof + 1);
+  };
+  andar(obj, 0);
+  return achado;
+}
+
+/* ============================== CHARGEBACK ============================== */
+
+/**
+ * A situação da LI conta como chargeback? Com códigos configurados, só eles valem;
+ * sem códigos, vale a situação cujo código ou nome tenha uma das palavras (ex.: "chargeback", "disputa").
+ */
+function ehSituacaoChargeback_(sit, cfg) {
+  cfg = cfg || CONFIG;
+  if (!sit) return false;
+  const codigos = cfg.LI_SITUACOES_CHARGEBACK || [];
+  if (codigos.length) return codigos.indexOf(String(sit.codigo || '')) >= 0;
+  const texto = normalizarTexto_((sit.codigo || '') + ' ' + (sit.nome || ''));
+  return (cfg.PALAVRAS_CHARGEBACK || []).some(function (p) { return texto.indexOf(p) >= 0; });
+}
+
