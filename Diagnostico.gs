@@ -32,6 +32,10 @@ function diagnosticoLojaIntegrada() {
     const sit = liGet_('/situacao/', { limit: 100 });
     const lista = ((sit && (sit.objects || sit)) || []).map(function (s) { return s.id + ' = ' + s.codigo + ' (' + s.nome + ')'; });
     saidaDiag_('LI — situações disponíveis', lista.join('\n'));
+    const cb = liSituacoesChargeback_();
+    saidaDiag_('LI — situações tratadas como chargeback', cb.length
+      ? cb.map(function (s) { return s.id + ' = ' + s.codigo + ' (' + s.nome + ')'; }).join('\n')
+      : 'Nenhuma reconhecida. Copie o código da situação de chargeback da lista acima para CONFIG.LI_SITUACOES_CHARGEBACK.');
 
     const desde = prop_('DATA_INICIO') ||
       Utilities.formatDate(new Date(Date.now() - 7 * 86400000), CONFIG.FUSO, 'yyyy-MM-dd HH:mm:ss');
@@ -126,12 +130,15 @@ function diagnosticoCorreios() {
       if (b.indexOf('20') !== 0) return;
     }
 
-    const codigo = perguntar_('Código SEDEX/PAC para testar (ex.: AB123456789BR):');
+    const codigo = perguntar_('Código SEDEX/PAC para testar — de preferência um já ENTREGUE, para ver se aparece quem recebeu:');
     if (!codigo) return;
     const norm = correiosRastrear_(codigo.toUpperCase());
     saidaDiag_('Correios — ' + codigo, {
       statusInterno: statusPorEventos_(norm.eventos),
       previsao: norm.previsao,
+      // só o 1º nome (dado pessoal); serve para confirmar que a API informa quem recebeu
+      recebidoPor: norm.recebedor ? norm.recebedor.split(' ')[0] + ' …' : '(não informado pela API)',
+      camposDoEventoDeEntrega: norm.camposEntrega.join(', ') || '(sem evento de entrega)',
       eventos: norm.eventos.map(function (e) { return fmtData_(e.data) + ' | ' + e.codigo + '/' + e.tipo + ' | ' + e.descricao + ' | ' + e.local + ' → ' + classificarEvento_(e); })
     });
   } catch (e) {
