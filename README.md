@@ -64,9 +64,21 @@ finalizado para de ser consultado. Envio com mais de 60 dias sem conclusão sai 
 | **Em devolução** · **Devolvido** | ⚠️ | voltando / chegou de volta |
 | **Extraviado / roubado** | ⚠️ | inclui "não localizado no fluxo postal" e "sinistro" |
 | **Etiqueta cancelada** | ⚠️ | etiqueta do Melhor Envio cancelada ou expirada |
-| Entregue | ✅ | finaliza e entra na lista de satisfação |
+| Entregue | ✅ | finaliza e entra na lista de satisfação. Guarda **quem recebeu**, quando a transportadora informa |
+| **Chargeback (compra contestada)** | ⚠️ | o pedido entrou em chargeback / pagamento em disputa na LI (veja abaixo) |
 
 Os limites (dias, prazos, janelas) ficam em `Config.gs`.
+
+### Chargeback e quem recebeu
+A cada 15 min o sistema também procura na LI os pedidos que entraram em **chargeback / pagamento em disputa**
+(situações reconhecidas pelo código ou nome, ou fixadas em `CONFIG.LI_SITUACOES_CHARGEBACK`). Para cada um:
+- marca a coluna **Chargeback** na aba Envios, gera alerta e e-mail, e o caso vai para o topo da fila de Ocorrências;
+- se o pedido não estava na planilha (ex.: antigo), entra com os códigos dele e é rastreado ao menos uma vez;
+- se já foi entregue, mostra a **prova de entrega**: data e **quem recebeu** (coluna *Recebido por*);
+- não entra na lista de satisfação. O alerta só sai quando a tratativa do chargeback for resolvida ou encerrada no app.
+
+O nome de quem recebeu vem do evento de entrega dos Correios ou do detalhe da etiqueta do Melhor Envio, quando
+a transportadora informa. O documento do recebedor nunca é guardado.
 
 ---
 
@@ -98,15 +110,15 @@ Um caso resolvido volta para a fila sozinho se aparecer um problema novo no pedi
 | Arquivo | Responsabilidade |
 |---|---|
 | `Config.gs` | parâmetros (prazos, janelas, limites) e colunas da aba Envios |
-| `Http.gs` | chamadas HTTP com novas tentativas em 429/5xx |
-| `LojaIntegrada.gs` | pedidos "Enviado", códigos de rastreio, datas e contato do cliente |
+| `Http.gs` | chamadas HTTP com novas tentativas em erros 429/5xx (`httpJson_`, `montarQuery_`) |
+| `LojaIntegrada.gs` | pedidos "Enviado" e em chargeback, códigos de rastreio, datas e contato do cliente |
 | `Correios.gs` | API Rastro (CWS) com chave de acesso `cws-…` |
 | `MelhorEnvio.gs` | busca de etiquetas (código, nº do pedido, nome) e status em lote |
-| `Classificador.gs` | regras de status, prazos, rotas e normalização de códigos (funções puras) |
+| `Classificador.gs` | regras de status, prazos, rotas, normalização de códigos, quem recebeu e situações de chargeback (funções puras) |
 | `Rastreio.gs` | rodada de atualização: cascata, histórico, alertas |
 | `Planilha.gs` | leitura/gravação das abas, sincronização de alertas |
 | `Resumo.gs` | aba Resumo (últimos 14 dias úteis) |
-| `Main.gs` | menu, instalação, agendamentos, busca na LI, e-mails |
+| `Main.gs` | menu, instalação, agendamentos, busca na LI, verificação de chargeback, e-mails |
 | `Diagnostico.gs` | testes de credenciais e de campos de cada API |
 | `WebApp.gs` · `App.html` | app web (servidor e tela) |
 | `appsscript.json` | manifesto e permissões |
