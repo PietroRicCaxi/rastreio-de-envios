@@ -89,10 +89,15 @@ function formatarEnvios_() {
     let cor = null;
     if (k === 'ENTREGUE') cor = verde;
     else if (['EXTRAVIADO', 'DEVOLVIDO', 'EM_DEVOLUCAO', 'DESVIO', 'CANCELADO', 'PARADO', 'NAO_POSTADO', 'PROBLEMA_ENTREGA'].indexOf(k) >= 0) cor = vermelho;
+    else if (k === 'SEM_RASTREIO') cor = cinza;
     else if (s.alerta) cor = amarelo;
     else if (k === 'ERRO_CONSULTA' || k === 'NAO_LOCALIZADO_ME') cor = cinza;
     if (cor) regras.push(regra(s.rotulo, cor));
   });
+  // coluna Chargeback preenchida → vermelho
+  const colCb = COLUNAS_ENVIOS.indexOf('Chargeback') + 1;
+  regras.push(SpreadsheetApp.newConditionalFormatRule().whenCellNotEmpty().setBackground(vermelho)
+    .setRanges([aba.getRange(2, colCb, Math.max(aba.getMaxRows() - 1, 1), 1)]).build());
   aba.setConditionalFormatRules(regras);
 }
 
@@ -169,11 +174,21 @@ function sincronizarAlertas_(linhasEnvios) {
   const range = aba.getRange(2, 1, ult - 1, 10);
   const valores = range.getValues();
   const quando = agoraStr_('dd/MM HH:mm');
+  let trats = null;
   let resolvidos = 0;
   valores.forEach(function (l) {
     if (l[0] === '' || l[8] === true) return;
     const o = atual[String(l[1]) + '|' + normalizarCodigo_(l[3])];
     if (!o) return;
+    if (l[5] === STATUS.CHARGEBACK.rotulo) {
+      // chargeback não depende do rastreio: só sai quando a tratativa for resolvida/encerrada no app
+      if (!trats) { try { trats = lerTratativas_(); } catch (e) { trats = {}; } }
+      if (tipoOcorrencia_(o, trats[o['Chave']]) === 'CHARGEBACK') return;
+      l[8] = true;
+      l[9] = 'Resolvido em ' + quando + ': tratativa do chargeback encerrada no app';
+      resolvidos++;
+      return;
+    }
     if (STATUS[o['Status código']] && STATUS[o['Status código']].alerta && o['Status'] === l[5]) return; // continua valendo
     l[8] = true;
     l[9] = 'Resolvido automaticamente em ' + quando + ': agora "' + (o['Status'] || '?') + '"';
