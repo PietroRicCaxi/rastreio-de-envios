@@ -85,7 +85,8 @@ function avisarAcessoCorreiosNegado_(mensagem) {
 
 /**
  * Converte a resposta dos Correios para o formato interno:
- * { eventos: [{data, descricao, local, codigo, tipo}] (mais recente primeiro), previsao, erro }
+ * { eventos: [{data, descricao, local, codigo, tipo, recebedor}] (mais recente primeiro), previsao, erro,
+ *   recebedor (quem recebeu, se os Correios informarem), camposEntrega (nomes dos campos do evento de entrega) }
  */
 function correiosNormalizar_(obj) {
   if (!obj) return { eventos: [], previsao: null, erro: 'Sem resposta dos Correios' };
@@ -102,13 +103,23 @@ function correiosNormalizar_(obj) {
       descricao: descricao,
       local: [un.nome || '', [end.cidade, end.uf].filter(Boolean).join('/')].filter(Boolean).join(' — '),
       codigo: ev.codigo || '',
-      tipo: ev.tipo || ''
+      tipo: ev.tipo || '',
+      recebedor: extrairRecebedor_(ev),
+      _campos: Object.keys(ev)
     };
   });
   eventos.sort(function (a, b) { return new Date(b.data) - new Date(a.data); });
+  // quem recebeu: de preferência o do evento de entrega
+  const entrega = eventos.filter(function (e) { return classificarEvento_(e) === 'ENTREGUE'; })[0];
+  const comNome = eventos.filter(function (e) { return e.recebedor; })[0];
+  const recebedor = (entrega && entrega.recebedor) || (comNome && comNome.recebedor) || extrairRecebedor_({ recebedor: obj.recebedor });
+  const camposEntrega = entrega ? entrega._campos : [];
+  eventos.forEach(function (e) { delete e._campos; });
   return {
     eventos: eventos,
     previsao: obj.dtPrevista || null,
-    erro: eventos.length ? null : (obj.mensagem || null)
+    erro: eventos.length ? null : (obj.mensagem || null),
+    recebedor: recebedor,
+    camposEntrega: camposEntrega
   };
 }
