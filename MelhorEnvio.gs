@@ -58,7 +58,7 @@ function meIndexarEtiquetas_(codigos, dataLimite, tempoOk, info) {
       info.etiquetas++;
       const campos = { self_tracking: it.self_tracking, tracking: it.tracking, protocol: it.protocol,
                        melhorenvio_tracking: it.melhorenvio_tracking, authorization_code: it.authorization_code, id: it.id };
-      // Número do pedido da Loja Integrada gravado na etiqueta (tag mi:marketplace_code ou "Loja Integrada - SITE 34433")
+      // Número do pedido da Loja Integrada gravado na etiqueta (tag mi:marketplace_code ou "Loja Integrada - SITE 12345")
       const ped = pedidoDaEtiqueta_(it);
       if (ped && !/^(canceled|cancelled|expired)$/i.test(String(it.status || ''))) campos.pedido = 'PEDIDO:' + ped;
       Object.keys(campos).forEach(function (nome) {
@@ -204,6 +204,7 @@ function meNormalizar_(info) {
     previsao: null,
     erro: null,
     statusMe: String(info.status || '').toLowerCase(),
-    tracking: info.tracking || info.melhorenvio_tracking || ''
+    tracking: info.tracking || info.melhorenvio_tracking || '',
+    recebedor: extrairRecebedor_(info)
   };
 }
