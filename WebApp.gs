@@ -33,7 +33,7 @@ const TRAT_SITUACOES = [
 
 // Gravidade para ordenar a fila (menor = mais grave)
 const GRAVIDADE = {
-  EXTRAVIADO: 1, DEVOLVIDO: 2, EM_DEVOLUCAO: 3, PROBLEMA_ENTREGA: 4, TENTATIVA_FALHOU: 4, DESVIO: 5,
+  CHARGEBACK: 0, EXTRAVIADO: 1, DEVOLVIDO: 2, EM_DEVOLUCAO: 3, PROBLEMA_ENTREGA: 4, TENTATIVA_FALHOU: 4, DESVIO: 5,
   PARADO: 6, ATRASADO: 7, AGUARDANDO_RETIRADA: 8, NAO_POSTADO: 9, CANCELADO: 10, SEM_CONCLUSAO: 11
 };
 
@@ -131,12 +131,28 @@ function situacaoAberta_(id) {
 }
 
 /**
+ * Tipo da ocorrência de uma linha (função pura): chargeback tem prioridade sobre o status do rastreio
+ * até a tratativa do chargeback ser resolvida/encerrada; depois volta a valer o status do rastreio.
+ */
+function tipoOcorrencia_(o, trat) {
+  if (o['Chargeback'] && !(trat && !situacaoAberta_(trat.situacao) && trat.statusResolucao === 'CHARGEBACK')) return 'CHARGEBACK';
+  return o['Status código'];
+}
+
+/** Rótulo do tipo de ocorrência (para chargeback, o do STATUS; senão, o gravado na planilha). */
+function rotuloTipo_(o, tipo) {
+  return tipo === o['Status código'] ? (o['Status'] || '') : (STATUS[tipo] ? STATUS[tipo].rotulo : tipo);
+}
+
+/**
  * Regra da fila (função pura): uma linha é ocorrência quando o status atual é de alerta e
  *  - a tratativa está aberta, ou
  *  - foi resolvida/encerrada, mas o status mudou desde então (problema novo → reabre).
+ * Chargeback não resolvido é sempre ocorrência.
  */
 function ehOcorrenciaAberta_(o, trat) {
-  const cod = o['Status código'];
+  const cod = tipoOcorrencia_(o, trat);
+  if (cod === 'CHARGEBACK') return true;
   if (!STATUS[cod] || !STATUS[cod].alerta) return false;
   if (!trat) return true;
   if (situacaoAberta_(trat.situacao)) return true;
@@ -163,6 +179,7 @@ function inicioDosAlertas_() {
 /** Situação da satisfação de uma linha: 'pendente' | 'enviada' | 'dispensada' | '' (não se aplica). */
 function situacaoSatisfacao_(o, t, agora) {
   if (o['Status código'] !== 'ENTREGUE') return '';
+  if (o['Chargeback']) return '';  // compra contestada: não manda pesquisa de satisfação
   if (t && t.satisfacao) return t.satisfacao;
   const entrega = o['Data último evento'] ? new Date(o['Data último evento']).getTime() : 0;
   if (!entrega) return '';
@@ -217,12 +234,13 @@ function api_pedidos() {
     }
     const prazo = Number(o['Prazo LI (dias úteis)']) || null;
     const sat = situacaoSatisfacao_(o, t, agora);
+    const tipo = tipoOcorrencia_(o, t);
     return {
       chave: o['Chave'], pedido: String(o['Pedido LI']), cliente: o['Cliente'] || '', cidade: o['Cidade/UF'] || '',
       dataPedido: o['Data pedido'] ? fmtData_(o['Data pedido'], 'dd/MM') : '',
       ts: o['Data pedido'] ? new Date(o['Data pedido']).getTime() : (o['Data vínculo'] ? new Date(o['Data vínculo']).getTime() : 0),
       forma: o['Forma de envio'] || '', enviadoPor: o['Enviado por'] || '', codigo: String(o['Código rastreio'] || ''),
-      tipo: o['Status código'] || '', status: o['Status'] || '', grupo: grupoStatus_(o, t),
+      tipo: tipo || '', status: rotuloTipo_(o, tipo), grupo: grupoStatus_(o, t),
       entregueEm: o['Status código'] === 'ENTREGUE' && o['Data último evento'] ? fmtData_(o['Data último evento'], 'dd/MM') : '',
       dias: dias, prazo: prazo, passou: dias !== null && !!prazo && dias > prazo,
       satisfacao: sat, satisfacaoEm: t && t.satisfacaoEm ? fmtData_(t.satisfacaoEm, 'dd/MM HH:mm') : '',
@@ -326,18 +344,19 @@ function api_ocorrencias() {
     const t = trats[o['Chave']];
     if (!ehOcorrenciaAberta_(o, t)) return;
     const reaberta = t && !situacaoAberta_(t.situacao);
-    const desde = inicios[String(o['Pedido LI']) + '|' + normalizarCodigo_(o['Código rastreio']) + '|' + o['Status']];
+    const tipo = tipoOcorrencia_(o, t);
+    const desde = inicios[String(o['Pedido LI']) + '|' + normalizarCodigo_(o['Código rastreio']) + '|' + rotuloTipo_(o, tipo)];
     itens.push({
       chave: o['Chave'],
       pedido: String(o['Pedido LI']),
       cliente: o['Cliente'] || '',
       cidade: o['Cidade/UF'] || '',
-      tipo: o['Status código'],
-      tipoLabel: o['Status'],
-      gravidade: GRAVIDADE[o['Status código']] || 50,
+      tipo: tipo,
+      tipoLabel: rotuloTipo_(o, tipo),
+      gravidade: GRAVIDADE[tipo] !== undefined ? GRAVIDADE[tipo] : 50,
       desde: desde ? fmtData_(desde, 'dd/MM') : '',
       diasUteis: desde ? diasUteisEntre_(desde, agora) : null,
-      evento: o['Último evento'] || '',
+      evento: tipo === 'CHARGEBACK' ? 'Chargeback na LI: ' + o['Chargeback'] + ' · rastreio: ' + (o['Status'] || '—') : (o['Último evento'] || ''),
       eventoData: o['Data último evento'] ? fmtData_(o['Data último evento']) : '',
       forma: o['Forma de envio'] || '',
       enviadoPor: o['Enviado por'] || '',
@@ -420,6 +439,11 @@ function mensagemSugerida_(tipo, d) {
               (d.endereco ? '\n\nEndereço cadastrado: ' + d.endereco : '') + '\n' + cod.trim(); break;
     case 'EXTRAVIADO':
       corpo = 'Infelizmente a transportadora informou o extravio do pedido #' + d.pedido + '. Pedimos desculpas! Já estamos cuidando disso e vamos combinar com você o reenvio ou o reembolso.'; break;
+    case 'CHARGEBACK':
+      corpo = 'Recebemos da operadora do seu cartão uma contestação da compra do pedido #' + d.pedido + '. ' +
+              (d.entregueEm ? 'Pelo rastreio, o pedido foi entregue em ' + d.entregueEm + (d.recebedor ? ' e recebido por ' + d.recebedor : '') + '. '
+                            : (d.statusRastreio ? 'Pelo rastreio, a situação do envio é: ' + d.statusRastreio + '. ' : '')) +
+              'Você reconhece esta compra? Se aconteceu algum problema com a entrega ou com os produtos, fale com a gente que resolvemos por aqui.' + cod; break;
     case 'EM_DEVOLUCAO': case 'DEVOLVIDO':
       corpo = 'O pedido #' + d.pedido + ' não pôde ser entregue e está voltando para nós. Vamos combinar o reenvio: pode confirmar o endereço de entrega?' +
               (d.endereco ? '\n\nEndereço cadastrado: ' + d.endereco : ''); break;
@@ -434,17 +458,19 @@ function api_pedido(chave) {
   const o = acharLinha_(chave);
   const trats = lerTratativas_();
   const t = trats[chave] || null;
-  const reaberta = t && !situacaoAberta_(t.situacao) && t.statusResolucao !== o['Status código'] && STATUS[o['Status código']] && STATUS[o['Status código']].alerta;
+  const tipo = tipoOcorrencia_(o, t);
+  const reaberta = t && !situacaoAberta_(t.situacao) && t.statusResolucao !== tipo && STATUS[tipo] && STATUS[tipo].alerta;
 
   // Eventos ao vivo da transportadora
-  let eventos = [], fonte = '', avisoEventos = '';
+  let eventos = [], fonte = '', avisoEventos = '', recebedorAgora = '';
   try {
     if (o['Rota'] === 'CORREIOS_API' && correiosDisponivel_()) {
       const norm = correiosRastrear_(o['Código rastreio']);
-      eventos = norm.eventos; fonte = 'Correios';
+      eventos = norm.eventos; fonte = 'Correios'; recebedorAgora = norm.recebedor || '';
     } else if (o['ID Melhor Envio']) {
       const st = meStatusLote_([String(o['ID Melhor Envio'])]);
-      eventos = meNormalizar_(st[String(o['ID Melhor Envio'])]).eventos; fonte = 'Melhor Envio';
+      const norm = meNormalizar_(st[String(o['ID Melhor Envio'])]);
+      eventos = norm.eventos; fonte = 'Melhor Envio'; recebedorAgora = norm.recebedor || '';
       avisoEventos = 'O Melhor Envio informa só as etapas principais. Os eventos detalhados da transportadora estão no link de rastreio.';
     }
   } catch (e) { avisoEventos = 'Não foi possível consultar a transportadora agora: ' + e.message; }
@@ -454,9 +480,12 @@ function api_pedido(chave) {
   try { const p = liDetalhePedido_(o['Pedido LI']); if (p) contato = liContatoCliente_(p); } catch (e) {}
 
   const transportadora = o['Enviado por'] || o['Forma de envio'] || '';
-  const msg = mensagemSugerida_(o['Status código'], {
+  const recebidoPor = o['Recebido por'] || recebedorAgora;
+  const entregueEm = o['Status código'] === 'ENTREGUE' && o['Data último evento'] ? fmtData_(o['Data último evento'], 'dd/MM/yyyy') : '';
+  const msg = mensagemSugerida_(tipo, {
     nome: primeiroNome_(contato.nome || o['Cliente']), pedido: String(o['Pedido LI']), codigo: String(o['Código rastreio'] || ''),
-    transportadora: transportadora, endereco: contato.endereco, link: o['Link rastreio'] || ''
+    transportadora: transportadora, endereco: contato.endereco, link: o['Link rastreio'] || '',
+    entregueEm: entregueEm, recebedor: recebidoPor, statusRastreio: o['Status'] || ''
   });
 
   let diasTransito = null;
@@ -469,20 +498,23 @@ function api_pedido(chave) {
 
   const agora = new Date();
   const sat = situacaoSatisfacao_(o, t, agora);
-  const alerta = !!(STATUS[o['Status código']] && STATUS[o['Status código']].alerta);
+  const alerta = !!(STATUS[tipo] && STATUS[tipo].alerta);
   return {
     chave: chave,
     pedido: String(o['Pedido LI']),
     dataPedido: o['Data pedido'] ? fmtData_(o['Data pedido'], 'dd/MM/yyyy') : '',
     vinculo: o['Data vínculo'] ? fmtData_(o['Data vínculo'], 'dd/MM/yyyy') : '',
     entregue: o['Status código'] === 'ENTREGUE',
-    entregueEm: o['Status código'] === 'ENTREGUE' && o['Data último evento'] ? fmtData_(o['Data último evento'], 'dd/MM/yyyy') : '',
+    entregueEm: entregueEm,
+    recebidoPor: recebidoPor,
+    chargeback: o['Chargeback'] || '',
+    statusRastreio: o['Status'] || '', tipoRastreio: o['Status código'] || '',
     satisfacao: sat || (o['Status código'] === 'ENTREGUE' ? 'fora_janela' : ''),
     satisfacaoEm: t && t.satisfacaoEm ? fmtData_(t.satisfacaoEm, 'dd/MM HH:mm') : '',
     mensagemSatisfacao: mensagemSatisfacao_({ nome: primeiroNome_(contato.nome || o['Cliente']), pedido: String(o['Pedido LI']) }),
     mostrarTratativa: alerta || !!(t && (t.situacao !== 'nova' || t.gestao)),
     contagens: contagens_(lerEnvios_().linhas, trats, agora),
-    tipo: o['Status código'], tipoLabel: o['Status'],
+    tipo: tipo, tipoLabel: rotuloTipo_(o, tipo),
     alerta: alerta,
     forma: o['Forma de envio'] || '', enviadoPor: o['Enviado por'] || '',
     codigo: String(o['Código rastreio'] || ''), codigoTransportadora: String(o['Código transportadora'] || ''),
@@ -494,7 +526,7 @@ function api_pedido(chave) {
     previsao: o['Previsão entrega'] ? fmtData_(o['Previsão entrega'], 'dd/MM') : '',
     semMovimento: semMov,
     eventos: eventos.map(function (e) {
-      return { dia: fmtData_(e.data, 'dd/MM'), hora: fmtData_(e.data, 'HH:mm'), titulo: e.descricao, local: e.local || '' };
+      return { dia: fmtData_(e.data, 'dd/MM'), hora: fmtData_(e.data, 'HH:mm'), titulo: e.descricao, local: e.local || '', recebedor: e.recebedor || '' };
     }),
     fonteEventos: fonte, avisoEventos: avisoEventos,
     cliente: { nome: contato.nome || o['Cliente'] || '', cidade: o['Cidade/UF'] || '', email: contato.email,
@@ -523,11 +555,12 @@ function api_salvarTratativa(chave, situacao, nota, gestao) {
     const o = acharLinha_(chave);
     const t = tratativaAtual_(chave, o);
     if (!TRAT_SITUACOES.some(function (s) { return s.id === situacao; })) throw new Error('Situação inválida: ' + situacao);
+    const tipo = tipoOcorrencia_(o, t.linha ? t : null);
     const mudouSit = t.situacao !== situacao;
     const avisarGestao = gestao === true && !t.gestao;
     t.situacao = situacao;
     t.gestao = gestao === true;
-    t.statusResolucao = situacaoAberta_(situacao) ? '' : o['Status código'];
+    t.statusResolucao = situacaoAberta_(situacao) ? '' : tipo;
     t.por = usuarioAtual_() || 'Operadora';
     gravarTratativa_(chave, o['Pedido LI'], t);
     if (mudouSit) registrarTratHist_(chave, o['Pedido LI'], 'Situação', 'Alterada para "' + rotuloSituacao_(situacao) + '"');
@@ -537,10 +570,10 @@ function api_salvarTratativa(chave, situacao, nota, gestao) {
       const para = (prop_('EMAILS_GESTAO') || prop_('EMAILS_ALERTA', true));
       MailApp.sendEmail({
         to: para,
-        subject: '[Rastreio] Pedido #' + o['Pedido LI'] + ' — ' + o['Status'] + ' (' + rotuloSituacao_(situacao) + ')',
+        subject: '[Rastreio] Pedido #' + o['Pedido LI'] + ' — ' + rotuloTipo_(o, tipo) + ' (' + rotuloSituacao_(situacao) + ')',
         htmlBody: '<p style="font-family:Arial">A operadora marcou este caso para a gestão acompanhar.</p>' +
           tabelaHtml_(['Pedido', 'Cliente', 'Ocorrência', 'Situação', 'Rastreio'],
-            [[o['Pedido LI'], o['Cliente'], '<b>' + o['Status'] + '</b>', rotuloSituacao_(situacao), o['Código rastreio']]]) +
+            [[o['Pedido LI'], o['Cliente'], '<b>' + rotuloTipo_(o, tipo) + '</b>', rotuloSituacao_(situacao), o['Código rastreio']]]) +
           (nota ? '<p style="font-family:Arial"><b>Anotação:</b> ' + String(nota).replace(/</g, '&lt;') + '</p>' : '') +
           '<p style="font-family:Arial;font-size:12px;color:#666">Por ' + (t.por || 'Operadora') + '</p>'
       });
