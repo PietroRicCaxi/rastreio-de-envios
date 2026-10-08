@@ -1,167 +1,148 @@
 /**
- * LojaIntegrada.gs — leitura de pedidos "Enviado" e dos códigos de rastreio.
- *
- * API v1: https://api.awsli.com.br/v1
- * Autenticação: header  Authorization: chave_api <CHAVE> aplicacao <CHAVE_APLICACAO>
- *
- * IMPORTANTE: os nomes de campos abaixo seguem a API v1 da LI. Se a função
- * diagnosticoLojaIntegrada() mostrar nomes diferentes, ajuste só as funções
- * liExtrairEnvios_() e liResumoPedido_() — o resto do sistema não muda.
+ * Diagnostico.gs — testes para rodar ANTES de ligar o sistema.
+ * Cada diagnóstico escreve o resultado na aba "Diagnóstico" (e no log de execução).
+ * Use para confirmar credenciais e o nome real dos campos de cada API.
  */
-const LI_BASE = 'https://api.awsli.com.br/v1';
 
-function liHeaders_() {
-  return {
-    'Authorization': 'chave_api ' + prop_('LI_CHAVE_API', true) +
-                     ' aplicacao ' + prop_('LI_CHAVE_APLICACAO', true),
-    'Content-Type': 'application/json'
-  };
+function saidaDiag_(titulo, conteudo) {
+  const ss = planilha_();
+  let aba = ss.getSheetByName('Diagnóstico');
+  if (!aba) aba = ss.insertSheet('Diagnóstico');
+  const texto = typeof conteudo === 'string' ? conteudo : JSON.stringify(conteudo, null, 2);
+  aba.insertRowBefore(1);
+  aba.getRange(1, 1, 1, 3).setValues([[agoraStr_(), titulo, texto.substring(0, 49000)]]);
+  aba.getRange(1, 3).setWrap(true);
+  aba.setColumnWidth(3, 900);
+  console.log(titulo + '\n' + texto);
 }
 
-function liGet_(caminho, params) {
-  Utilities.sleep(CONFIG.PAUSA_ENTRE_CHAMADAS_MS);
-  return httpJson_(LI_BASE + caminho + montarQuery_(params),
-    { method: 'get', headers: liHeaders_() }, 'LI GET ' + caminho);
-}
-
-function liPut_(caminho, corpo) {
-  Utilities.sleep(CONFIG.PAUSA_ENTRE_CHAMADAS_MS);
-  return httpJson_(LI_BASE + caminho,
-    { method: 'put', headers: liHeaders_(), payload: JSON.stringify(corpo) }, 'LI PUT ' + caminho);
-}
-
-/** Descobre o ID numérico de uma situação pelo código (ex.: "pedido_enviado"). Fica em cache. */
-function liIdSituacao_(codigo) {
-  const chave = 'LI_SITUACAO_ID_' + codigo;
-  const cache = prop_(chave);
-  if (cache) return cache;
-
-  const resp = liGet_('/situacao/', { limit: 100 });
-  const lista = (resp && (resp.objects || resp)) || [];
-  for (let i = 0; i < lista.length; i++) {
-    if (lista[i].codigo === codigo) {
-      setProp_(chave, lista[i].id);
-      return String(lista[i].id);
-    }
+function perguntar_(msg) {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const r = ui.prompt(msg);
+    return r.getSelectedButton() === ui.Button.OK ? r.getResponseText().trim() : '';
+  } catch (e) {
+    return ''; // rodando pelo editor: sem janela
   }
-  throw new Error('Situação "' + codigo + '" não encontrada na LI. Rode diagnosticoLojaIntegrada() ' +
-    'e ajuste CONFIG.LI_SITUACAO_ENVIADO com o código correto.');
 }
 
-/** Lista de situações da LI ({id, codigo, nome}), guardada por 6 h. */
-function liSituacoes_() {
-  const cache = CacheService.getScriptCache();
-  const salvo = cache.get('LI_SITUACOES');
-  if (salvo) return JSON.parse(salvo);
-  const resp = liGet_('/situacao/', { limit: 100 });
-  const lista = ((resp && (resp.objects || resp)) || []).map(function (x) {
-    return { id: String(x.id), codigo: x.codigo || '', nome: x.nome || '' };
-  });
-  cache.put('LI_SITUACOES', JSON.stringify(lista), 6 * 60 * 60);
-  return lista;
-}
+/** 1) Loja Integrada: credenciais, situações e um pedido "Enviado" de exemplo. */
+function diagnosticoLojaIntegrada() {
+  try {
+    const sit = liGet_('/situacao/', { limit: 100 });
+    const lista = ((sit && (sit.objects || sit)) || []).map(function (s) { return s.id + ' = ' + s.codigo + ' (' + s.nome + ')'; });
+    saidaDiag_('LI — situações disponíveis', lista.join('\n'));
+    const cb = liSituacoesChargeback_();
+    saidaDiag_('LI — situações tratadas como chargeback', cb.length
+      ? cb.map(function (s) { return s.id + ' = ' + s.codigo + ' (' + s.nome + ')'; }).join('\n')
+      : 'Nenhuma reconhecida. Copie o código da situação de chargeback da lista acima para CONFIG.LI_SITUACOES_CHARGEBACK.');
 
-/** Situações da LI que contam como chargeback / pagamento em disputa (ver CONFIG.LI_SITUACOES_CHARGEBACK). */
-function liSituacoesChargeback_() {
-  return liSituacoes_().filter(function (x) { return ehSituacaoChargeback_(x); });
-}
+    const desde = prop_('DATA_INICIO') ||
+      Utilities.formatDate(new Date(Date.now() - 7 * 86400000), CONFIG.FUSO, 'yyyy-MM-dd HH:mm:ss');
+    const numeros = liListarEnviadosDesde_(desde);
+    saidaDiag_('LI — pedidos "Enviado" atualizados desde ' + desde, numeros.length + ' pedidos: ' + numeros.slice(0, 50).join(', '));
 
-/**
- * Lista os números dos pedidos de uma situação que foram ATUALIZADOS desde `desde`.
- * É isso que evita puxar os pedidos antigos (2022+): só entra o que mudou recentemente.
- */
-function liListarPorSituacaoDesde_(idSit, desde) {
-  const numeros = [];
-  let offset = 0;
-  const limit = 50;
-  while (true) {
-    const resp = liGet_('/pedido/search/', {
-      situacao_id: idSit,
-      since_atualizado: desde,
-      limit: limit,
-      offset: offset
+    const numero = perguntar_('Número de um pedido ENVIADO para inspecionar (vazio = o primeiro da lista):') || numeros[0];
+    if (!numero) return;
+    const p = liDetalhePedido_(numero);
+    saidaDiag_('LI — pedido ' + numero + ' (campos de envio brutos)', { situacao: p && p.situacao, envios: p && p.envios });
+    saidaDiag_('LI — pedido ' + numero + ' (como o sistema entende)', {
+      resumo: liResumoPedido_(p),
+      envios: liExtrairEnvios_(p).map(function (e) {
+        return Object.assign(e, {
+          monitorado: formaMonitorada_(e.formaNome, e.formaCodigo, e.codigo),
+          rota: decidirRota_(e.codigo, e.formaNome, e.formaCodigo, correiosDisponivel_())
+        });
+      })
     });
-    const objs = (resp && resp.objects) || [];
-    objs.forEach(function (p) {
-      if (p.numero) numeros.push(String(p.numero));
-    });
-    const temMais = resp && resp.meta && resp.meta.next;
-    if (!temMais || objs.length < limit) break;
-    offset += limit;
-    if (offset > 5000) break; // trava de segurança
+  } catch (e) {
+    saidaDiag_('LI — ERRO', e.message);
   }
-  return numeros;
 }
 
-/** Pedidos "Enviado" atualizados desde `desde`. */
-function liListarEnviadosDesde_(desde) {
-  return liListarPorSituacaoDesde_(liIdSituacao_(CONFIG.LI_SITUACAO_ENVIADO), desde);
-}
-
-function liDetalhePedido_(numero) {
-  return liGet_('/pedido/' + numero + '/');
-}
-
-/**
- * Converte as datas da LI em Date, aceitando os formatos que a API usa
- * ("2026-09-23T12:03:47.430942", "2026-09-23 12:03:47", "23/09/2026 12:03", com ou sem fuso).
- * Devolve null se não der para entender (em vez de gravar uma data inválida, que some na planilha).
- */
-function parseDataLi_(v) {
-  if (v === null || v === undefined || v === '') return null;
-  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
-  const s = String(v).trim();
-  if (/T.*(Z|[+-]\d{2}:?\d{2})$/.test(s)) { const z = new Date(s); if (!isNaN(z.getTime())) return z; }
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  if (m) return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
-  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-/** Dados básicos do pedido para a planilha. */
-function liResumoPedido_(p) {
-  const cliente = p.cliente || {};
-  const end = p.endereco_entrega || {};
-  const sit = p.situacao || {};
-  return {
-    numero: String(p.numero),
-    dataPedido: p.data_criacao || p.data || p.data_modificacao || '',
-    dataModificacao: p.data_modificacao || '',
-    cliente: cliente.nome || end.nome || '',
-    cidadeUf: [end.cidade, end.estado].filter(Boolean).join('/'),
-    situacaoCodigo: (typeof sit === 'object') ? (sit.codigo || '') : String(sit),
-    situacaoNome: (typeof sit === 'object') ? (sit.nome || '') : ''
-  };
-}
-
-/**
- * Extrai os envios (código de rastreio + forma) de um pedido.
- * Um pedido pode ter mais de um envio/volume — cada um vira uma linha.
- */
-function liExtrairEnvios_(p) {
-  const envios = p.envios || p.envio || [];
-  const lista = Array.isArray(envios) ? envios : [envios];
-  const saida = [];
-  lista.forEach(function (e) {
-    if (!e) return;
-    const codigo = normalizarCodigo_(e.objeto || e.codigo_rastreio || e.rastreamento || e.tracking || '');
+/** 2) Melhor Envio: token, uma etiqueta postada de exemplo e busca por código. */
+function diagnosticoMelhorEnvio() {
+  try {
+    const lista = meGet_('/orders', { status: 'posted', page: 1 });
+    const itens = (lista && lista.data) || [];
+    saidaDiag_('ME — etiquetas postadas (amostra)', itens.slice(0, 3).map(function (it) {
+      return { id: it.id, protocol: it.protocol, status: it.status, tracking: it.tracking,
+               self_tracking: it.self_tracking, criada: it.created_at, servico: it.service && it.service.name,
+               transportadora: it.service && it.service.company && it.service.company.name };
+    }));
+    const codigo = perguntar_('Código de rastreio de um pedido Jadlog (como está na LI):');
     if (!codigo) return;
-    const forma = e.forma_envio || {};
-    saida.push({
-      codigo: codigo,
-      formaNome: forma.nome || forma.name || '',
-      formaCodigo: forma.code || forma.codigo || '',
-      formaTipo: forma.tipo || '',
-      prazoDias: Number(e.prazo || 0) || null,
-      dataEnvio: e.data_modificacao || e.data_criacao || ''
-    });
-  });
-  return saida;
+    const info = {};
+    const achados = meIndexarEtiquetas_([codigo.toUpperCase()], new Date(Date.now() - CONFIG.JANELA_MAX_DIAS * 86400000), null, info);
+    const id = achados[codigo.toUpperCase()] || null;
+    const varredura = info.etiquetas + ' etiquetas em ' + info.paginas + ' páginas, a mais antiga criada em ' +
+      (info.maisAntiga ? fmtData_(new Date(info.maisAntiga)) : '?');
+    saidaDiag_('ME — busca "' + codigo + '"', id
+      ? 'Encontrado: etiqueta ' + id + ' (campo: ' + info.campos[codigo.toUpperCase()] + ')\nVarridas ' + varredura
+      : 'NÃO encontrado em nenhum campo das etiquetas do Melhor Envio.\nVarridas ' + varredura +
+        '.\nSe a data da etiqueta é anterior a essa, aumente ME_MAX_PAGINAS_BUSCA; se não, essa etiqueta provavelmente não foi gerada nesta conta do Melhor Envio.');
+    if (id) {
+      const st = meStatusLote_([id]);
+      const norm = meNormalizar_(st[id]);
+      saidaDiag_('ME — status da etiqueta ' + id, { bruto: st[id], statusInterno: statusPorMelhorEnvio_(norm.statusMe, norm.eventos) });
+      const det = meDetalhe_(id) || {};
+      // só campos de rastreio — o detalhe completo traz dados pessoais (CPF, telefone, e-mail)
+      saidaDiag_('ME — detalhe da etiqueta ' + id, {
+        motivoEncontrado: motivoNoDetalhe_(det), status: det.status, pedidoLI: pedidoDaEtiqueta_(det),
+        authorization_code: det.authorization_code, tracking: det.tracking, self_tracking: det.self_tracking,
+        servico: det.service && ((det.service.company && det.service.company.name) + ' ' + det.service.name),
+        posted_at: det.posted_at, delivered_at: det.delivered_at, suspended_at: det.suspended_at,
+        chamados: (det.tickets || []).length, pode_abrir_chamado: det.can_open_ticket
+      });
+    }
+  } catch (e) {
+    saidaDiag_('ME — ERRO', e.message);
+  }
 }
 
-/** Muda a situação do pedido na LI (usado só se ATUALIZAR_LI_QUANDO_ENTREGUE = true). */
-function liAtualizarSituacao_(numero, codigoSituacao) {
-  return liPut_('/situacao/pedido/' + numero + '/', { codigo: codigoSituacao });
+/** 3) Correios: token e rastreio de um código. */
+function diagnosticoCorreios() {
+  try {
+    const chave = prop_('CORREIOS_CODIGO_ACESSO');
+    if (!correiosDisponivel_()) {
+      saidaDiag_('Correios', 'CORREIOS_CODIGO_ACESSO não preenchida (ou, no modelo antigo, faltam CORREIOS_USUARIO / CORREIOS_CARTAO_POSTAGEM).');
+      return;
+    }
+    if (correiosUsaChaveDireta_()) {
+      saidaDiag_('Correios — autenticação', 'Chave de acesso direta ("' + chave.substring(0, 4) + '...", ' + chave.length +
+        ' caracteres). Usada como Bearer, sem usuário/cartão.');
+    } else {
+      // Modelo antigo: teste em 2 etapas para achar a causa de um 401
+      const usuario = prop_('CORREIOS_USUARIO', true);
+      const basic = 'Basic ' + Utilities.base64Encode(usuario + ':' + chave);
+      const testar = function (caminho, corpo) {
+        const r = UrlFetchApp.fetch(CORREIOS_BASE + caminho, {
+          method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+          headers: { 'Authorization': basic }, payload: corpo ? JSON.stringify(corpo) : ''
+        });
+        const code = r.getResponseCode();
+        return code + (code >= 200 && code < 300 ? ' OK' : ' ' + r.getContentText().substring(0, 300));
+      };
+      const a = testar('/token/v1/autentica', null);
+      const b = testar('/token/v1/autentica/cartaopostagem', { numero: prop_('CORREIOS_CARTAO_POSTAGEM', true) });
+      saidaDiag_('Correios — teste de credenciais',
+        'Usuário: ' + usuario + '\nChave: ' + chave.length + ' caracteres\n\nA) usuário + chave: ' + a + '\nB) usuário + chave + cartão: ' + b);
+      if (b.indexOf('20') !== 0) return;
+    }
+
+    const codigo = perguntar_('Código SEDEX/PAC para testar — de preferência um já ENTREGUE, para ver se aparece quem recebeu:');
+    if (!codigo) return;
+    const norm = correiosRastrear_(codigo.toUpperCase());
+    saidaDiag_('Correios — ' + codigo, {
+      statusInterno: statusPorEventos_(norm.eventos),
+      previsao: norm.previsao,
+      // só o 1º nome (dado pessoal); serve para confirmar que a API informa quem recebeu
+      recebidoPor: norm.recebedor ? norm.recebedor.split(' ')[0] + ' …' : '(não informado pela API)',
+      camposDoEventoDeEntrega: norm.camposEntrega.join(', ') || '(sem evento de entrega)',
+      eventos: norm.eventos.map(function (e) { return fmtData_(e.data) + ' | ' + e.codigo + '/' + e.tipo + ' | ' + e.descricao + ' | ' + e.local + ' → ' + classificarEvento_(e); })
+    });
+  } catch (e) {
+    saidaDiag_('Correios — ERRO', e.message + (/403|401/.test(e.message)
+      ? '\n→ Confira se a API "Rastro" está liberada para o contrato em cws.correios.com.br' : ''));
+  }
 }
